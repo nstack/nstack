@@ -1,4 +1,4 @@
-# NStack: Composable streams and microservices for data analytics
+# NStack: Composable, type-safe streams and microservices for data analytics
 
 ## Introduction
 
