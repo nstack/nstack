@@ -1,6 +1,6 @@
 # NStack: Type-safe, composable microservices for data analytics
 
-NStack is a data analytics platform which makes productionising code and connecting it to data really simple. It provides a way to transform local code on your machine into *functions* which live on your cloud provider. These can be connected to data and event-sources using NStack's scripting language, and NStack automates all infrastructure. 
+NStack is a data analytics platform which makes productionising code and connecting it to data really simple. It provides a way to transform local code on your machine into *functions* which live on your cloud provider. These can be connected to data and event-sources using NStack's scripting language, and NStack automates all infrastructure and operations. 
 
 NStack is platform-agnostic, which means it can can run anywhere.
 
@@ -8,10 +8,11 @@ NStack is platform-agnostic, which means it can can run anywhere.
 screencast
 ```
 
-1. Why use NStack?
-2. Concepts
-3. Installation
-
+1. Why do people use NStack?
+2. Features
+3. Concepts
+4. Getting Started
+5. How NStack works
 
 ## 1. Why do people use NStack?
 
@@ -19,16 +20,16 @@ screencast
 Productionise your models in the cloud without complex engineering, where they can be used in workflows and attached to data-sources. For instance, you can build a Random Forest classifier locally in Python, publish it to your cloud provider, and connect it to a streaming system, database, or HTTP endpoint in under 10 minutes.
 
 ### Data Integration
-NStack transforms disparate and disconnected data-sources -- such as 3rd-party APIs, legacy infrastructure, or databases into streams of typed, structured records, which can be composed together. For instance, you could set up a workflow in the cloud which pipes the Twitter Ads API into your data warehouse (and even do some modelling in Python in-transit).
+NStack transforms disparate and disconnected data-sources -- such as 3rd-party APIs, legacy infrastructure, or databases into streams of typed, structured records, which can be composed together. For instance, you could set up a workflow in the cloud which pipes the Twitter Ads API into your data warehouse (and even do some modelling in Python in-transit) in under 5 minutes.
 
-## 3. Main Features
+## 2. Features
 - **Typed** Strongly-type your infrastructure and microservices to make them composable and secure
 - **Streaming** Move your batch workloads and existing code to a streaming paradigm, without complex infrastructure
 - **Fast** Really fast throughout by using the latest developments in the Linux kernel
 - **Serverless** Modules are deployed as serverless, containerised, versioned, fully reproducible microservices 
 - **Composable** Compose infrastructure in a statically typed workflow language to automate operations
 
-## 4. Concepts
+## 3. Concepts
 
 ### Modules
 
@@ -36,11 +37,11 @@ A module is a piece of code that has been published to NStack -- for instance, a
 
 ### Functions
 
-Functions are "serverless" functions which live on modules. For instance, the `predict` method on a Python class. Functions on NStack are `typed`, which means you can define what kind of data they can take as input, and the kind of data they output. This means they can be safely composed together.
+Functions are "serverless" functions which live on modules. For instance, the `predict` method on your Python class. Functions on NStack are `typed`, which means you can define what kind of data they can take as input, and the kind of data they output. This means they can be safely composed together.
 
 ### Sources & Sinks
 
-A source is something which emits a stream of data. A sink is something which can receive a stream of data. Example sources and sinks are databases, files, message-queues, and HTTP endpoints. Like modules, you can define the input and output schemas for your sources and sinks.
+A source is something which emits a stream of data. A sink is something which can receive a stream of data. Example sources and sinks are databases, files, message-queues, and HTTP endpoints. Like modules, you can define the input and output schemas for your sources and sinks. 
 
 ### Workflows
 
@@ -48,7 +49,9 @@ Modules, sources, and sinks can be combined to build workflows. This is accompli
 
 ### Processes
 
-When a workflow is started and is running in the cloud, it becomes a process. For instance, your classifier which has been connected to an HTTP endpoint.
+When a workflow is started and is running in the cloud, it becomes a process.
 
+## 4. Getting Started
 
+## 5. How NStack works
 
