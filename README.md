@@ -1,14 +1,18 @@
 # NStack: Composable streams and microservices for data analytics
 
+## Introduction
+
 NStack is a data analytics platform which makes integrating data, productionising code, and connecting it to that data really simple. Firstly, it provides a way to turn disparate data-sources -- such as databases, 3rd-party APIs, or HTTP endpoints, into streams of typed records. Secondly, it provides a way to publish local code on your machine into *functions* on your cloud provider. These streams of data can be composed with these functions using NStack's scripting language, and NStack automates all infrastructure and operations so you can focus on data-science instead of operations.
 
 NStack is platform-agnostic, which means it can can run anywhere.
+
+See the [website](https://nstack.com) for more information, or check out the [full documentation](https://docs.nstack.com).
 
 ```
 screencast
 ```
 
-## 1. Getting Started
+## Getting Started
 
 NStack is comprised of a CLI which runs on your machine, and a virtual machine which runs on the cloud.
 
@@ -44,23 +48,23 @@ Transform disparate and disconnected data-sources -- such as 3rd-party APIs, leg
 
 ## Concepts
 
-### Modules
+#### Modules
 
 A module is a piece of code that has been published to NStack -- for instance, a Python class. Modules are comprised of one or more **functions** -- in the same way a class of Python has one or more methods on it. Modules can have dependencies, like files or operating system packages -- for instance, your training data, or the ``scikit-learn`` package.
 
-### Functions
+#### Functions
 
 Functions are "serverless" functions which live on modules. For instance, the `predict` method on your Python class. Functions on NStack are `typed`, which means you can define what kind of data they can take as input, and the kind of data they output. For instance, you can say that your `predict` method only takes `Text` and returns `Integer`. This is important because it means they can be safely composed together and reused.
 
-### Sources & Sinks
+#### Sources & Sinks
 
 A source is something which emits a stream of data. A sink is something which can receive a stream of data. Example sources and sinks are databases, files, message-queues, and HTTP endpoints. Like modules, you can define the input and output schemas for your sources and sinks. 
 
-### Workflows
+#### Workflows
 
 Modules, sources, and sinks can be combined -- or _composed_ -- together to build workflows. This is accomplished using the NStack Workflow Language, a simple bash-like scripting language for connecting streams and functions together.
 
-### Processes
+#### Processes
 
 When a workflow is started and is running in the cloud, it becomes a process.
 
