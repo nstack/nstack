@@ -1,4 +1,4 @@
-# NStack: Composable streaming platform for data analytics
+# NStack: Composable streams and microservices for data analytics
 
 NStack is a data analytics platform which makes integrating data, productionising code, and connecting it to that data really simple. Firstly, it provides a way to turn disparate data-sources -- such as databases, 3rd-party APIs, or HTTP endpoints, into streams of typed records. Secondly, it provides a way to publish local code on your machine into *functions* on your cloud provider. These streams of data can be composed with these functions using NStack's scripting language, and NStack automates all infrastructure and operations so you can focus on data-science instead of operations.
 
