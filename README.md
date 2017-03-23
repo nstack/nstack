@@ -54,7 +54,7 @@ A module is a piece of code that has been published to NStack -- for instance, a
 
 #### Functions
 
-Functions are "serverless" functions which live on modules. For instance, the `predict` method on your Python class. Functions on NStack are `typed`, which means you can define what kind of data they can take as input, and the kind of data they output. For instance, you can say that your `predict` method only takes `Text` and returns `Integer`. This is important because it means they can be safely composed together and reused.
+Functions are "serverless" functions which live on modules. For instance, the `predict` method on your Python class. Functions on NStack are typed, which means you can define what kind of data they can take as input, and the kind of data they output. For instance, you can say that your `predict` method only takes `Text` and returns `Integer`. This is important because it means they can be safely composed together and reused.
 
 #### Sources & Sinks
 
