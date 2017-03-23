@@ -24,7 +24,16 @@ NStack is comprised of a CLI which runs on your machine, and a virtual machine w
 
 ### Server Installation
 
+#### PaaS
+
 NStack offers a free-of-charge PaaS (Platform as a Service), which means you can try NStack _without_ installing the server. Note that the PaaS is intended as a sandbox and is wiped ever 24 hours. 
+
+To create a demo account, run:
+```bash
+$ nstack register
+```
+
+#### Host your own server
 
 To install your own NStack server, we provide:
 - an AMI for AWS
@@ -45,6 +54,10 @@ Transform disparate and disconnected data-sources -- such as 3rd-party APIs, leg
 - **Fast** Really fast throughout by using the latest developments in the Linux kernel
 - **Serverless** Modules are deployed as serverless, containerised, versioned, fully reproducible microservices 
 - **Composable** Compose infrastructure in a statically typed workflow language to automate operations
+
+## Examples
+
+See https://github.com/nstackcom/nstack-examples
 
 ## Concepts
 
