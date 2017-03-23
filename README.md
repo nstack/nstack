@@ -2,7 +2,7 @@
 
 ## Introduction
 
-NStack is a data analytics platform which makes integrating data, productionising code, and connecting it to that data really simple. Firstly, it provides a way to turn disparate data-sources -- such as databases, 3rd-party APIs, or HTTP endpoints, into streams of typed records. Secondly, it provides a way to publish local code on your machine into *functions* on your cloud provider. These streams of data can be composed with these functions using NStack's scripting language, and NStack automates all infrastructure and operations so you can focus on data-science instead of operations.
+NStack is a data analytics platform which makes integrating data, productionising code, and connecting it to that data really simple. Firstly, it provides a way to turn disparate data-sources -- such as databases, 3rd-party APIs, or HTTP endpoints, into streams of typed records. Secondly, it provides a way to publish local code on your machine as *functions* on your cloud provider. These streams of data can be composed with these functions using NStack's scripting language, and NStack automates all infrastructure so you can focus on data-science instead of operations.
 
 NStack is platform-agnostic, which means it can can run anywhere.
 
@@ -57,7 +57,7 @@ Transform disparate and disconnected data-sources -- such as 3rd-party APIs, leg
 
 ## Examples
 
-See https://github.com/nstackcom/nstack-examples
+See https://github.com/nstack/nstack-examples
 
 ## Concepts
 
@@ -82,6 +82,7 @@ Modules, sources, and sinks can be combined -- or _composed_ -- together to buil
 When a workflow is started and is running in the cloud, it becomes a process.
 
 ## How NStack works
+
 ## Acknowledgments
 
 ## Contributing
