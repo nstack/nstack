@@ -24,7 +24,7 @@ Download `nstack-cli-{osx,win}.zip` for your platform, unzip, and run `nstack` f
 
 We provide RPM and DEB packages on the [releases page](https://github.com/nstack/nstack/releases) that will work for most common distros. We also have `yum` and `apt` repositories for Redhat and Debian- derived OSs that are updated on each release.
 
-#### RedHat / Fedora / OpenSuse RPMs
+##### RedHat / Fedora / OpenSuse RPMs
 
 A YUM/DNF repo for RedHat-based distros is located at http://distrepos.nstack.com/redhat - it includes both the `nstack-cli` and `nstack-server` packages,
 
@@ -33,7 +33,7 @@ sudo wget -O /etc/yum.repos.d/nstack.repo http://distrepos.nstack.com/redhat/nst
 sudo dnf install nstack-cli
 ```
 
-#### Ubuntu / Debian / Mint Debs
+##### Ubuntu / Debian / Mint Debs
 
 An Apt repo for Debian-based distros is located at http://distrepos.nstack.com/debian - it currently includes the `nstack-cli` package,
 
