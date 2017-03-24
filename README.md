@@ -8,10 +8,6 @@ NStack is platform-agnostic, which means it can run anywhere.
 
 See the [website](https://nstack.com) for more information, or check out the [full documentation](https://docs.nstack.com).
 
-```
-screencast
-```
-
 ## Getting Started
 
 NStack is comprised of a CLI which runs on your machine, and a virtual machine which runs on the cloud.
