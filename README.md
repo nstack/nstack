@@ -106,10 +106,3 @@ Modules, sources, and sinks can be combined -- or _composed_ -- together to buil
 #### Processes
 
 When a workflow is started and is running in the cloud, it becomes a process.
-
-## How NStack works
-
-## Acknowledgments
-
-## Contributing
-## License
