@@ -18,27 +18,67 @@ NStack is comprised of a CLI which runs on your machine, and a virtual machine w
 
 ### CLI Installation
 
-- Mac: 
-- Windows:
-- Linux:
+Our CLI is available for Linux, Mac, and Windows and the latest version can be downloaded on the [releases page](https://github.com/nstack/nstack/releases). They are all self-contained executables that you can just unzip abd run.
+
+#### Mac and Windows
+
+Download `nstack-cli-{osx,win}.zip` for your platform, unzip, and run `nstack` from the Terminal/Command Prompt
+
+#### Linux
+
+We provide RPM and DEB packages on the [releases page](https://github.com/nstack/nstack/releases) that will work for most common distros. We also have Yum and Apt repositories for Redhat and Debian- derived OSs that are updated on each release.
+
+#### RedHat / Fedora / OpenSuse RPMs
+
+A YUM/DNF repo for RedHat-based distros is located at http://distrepos.nstack.com/redhat - it includes both the `nstack-cli` and `nstack-server` packages,
+
+<!-- sudo rpm --import https://jenkins-ci.org/redhat/jenkins-ci.org.key -->
+```bash
+sudo wget -O /etc/yum.repos.d/nstack.repo http://distrepos.nstack.com/redhat/nstack.repo
+sudo dnf install nstack-cli
+```
+
+#### Ubuntu / Debian / Mint Debs
+
+An Apt repo for Debian-based distros is located at http://distrepos.nstack.com/debian - it currently includes the `nstack-cli` package,
+
+<!-- sudo rpm --import https://jenkins-ci.org/redhat/jenkins-ci.org.key -->
+```bash
+sudo wget -O /etc/sources.list.d/nstack.list http://distrepos.nstack.com/debian/nstack.list
+sudo apt-get update
+sudo apt-get install nstack-cli
+```
 
 ### Server Installation
 
 #### PaaS
 
-NStack offers a free-of-charge PaaS (Platform as a Service) for demo use, which means you can try NStack without installing the server. Note that the PaaS is intended as a sandbox and the environment is wiped every 24 hours. 
+NStack offers a free-of-charge PaaS (Platform as a Service) for demo use, which means you can try NStack without installing the server. Note that the PaaS is intended as a sandbox and the environment is wiped daily at 0600 UTC.
 
-To create a demo account, run:
+To create a demo account, please go to nstack.com and fill out the demo web form - you'll shortly receive an email with instructions to point your install of the `nstack` tookit to our demo server.
+
+<!--
+run:
 ```bash
 $ nstack register
 ```
+-->
 
 #### Host your own server
 
-To install your own NStack server, we provide:
-- an AMI for AWS
+To install your own NStack server, we provide a self-contained appliance VM:
+- an AMI for AWS EC2 (`ami-53a47245`)
 - a `.raw` disk image for hosting on your virtual machine of choice
-- an RPM to install on a Red Hat-like server
+
+We also provide an RPM and an associated Yum repository for installing directly on a Red Hat-like server
+
+```bash
+sudo wget -O /etc/yum.repos.d/nstack.repo http://distrepos.nstack.com/redhat/nstack.repo
+sudo dnf install nstack-server
+```
+
+These are all available on the [releases page](https://github.com/nstack/nstack/releases).
+
 
 ## What do people use NStack for?
 
