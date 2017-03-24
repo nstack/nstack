@@ -18,7 +18,7 @@ NStack is comprised of a CLI which runs on your machine, and a virtual machine w
 
 ### CLI Installation
 
-Our CLI is available for Linux, Mac, and Windows and the latest version can be downloaded on the [releases page](https://github.com/nstack/nstack/releases). They are all self-contained executables that you can just unzip abd run.
+Our CLI is available for Linux, Mac, and Windows and the latest version can be downloaded on the [releases page](https://github.com/nstack/nstack/releases). On each platform, the CLI is distributed as a self-contained executable.
 
 #### Mac and Windows
 
@@ -26,13 +26,12 @@ Download `nstack-cli-{osx,win}.zip` for your platform, unzip, and run `nstack` f
 
 #### Linux
 
-We provide RPM and DEB packages on the [releases page](https://github.com/nstack/nstack/releases) that will work for most common distros. We also have Yum and Apt repositories for Redhat and Debian- derived OSs that are updated on each release.
+We provide RPM and DEB packages on the [releases page](https://github.com/nstack/nstack/releases) that will work for most common distros. We also have `yum` and `apt` repositories for Redhat and Debian- derived OSs that are updated on each release.
 
 #### RedHat / Fedora / OpenSuse RPMs
 
 A YUM/DNF repo for RedHat-based distros is located at http://distrepos.nstack.com/redhat - it includes both the `nstack-cli` and `nstack-server` packages,
 
-<!-- sudo rpm --import https://jenkins-ci.org/redhat/jenkins-ci.org.key -->
 ```bash
 sudo wget -O /etc/yum.repos.d/nstack.repo http://distrepos.nstack.com/redhat/nstack.repo
 sudo dnf install nstack-cli
@@ -42,7 +41,6 @@ sudo dnf install nstack-cli
 
 An Apt repo for Debian-based distros is located at http://distrepos.nstack.com/debian - it currently includes the `nstack-cli` package,
 
-<!-- sudo rpm --import https://jenkins-ci.org/redhat/jenkins-ci.org.key -->
 ```bash
 sudo wget -O /etc/sources.list.d/nstack.list http://distrepos.nstack.com/debian/nstack.list
 sudo apt-get update
@@ -55,14 +53,7 @@ sudo apt-get install nstack-cli
 
 NStack offers a free-of-charge PaaS (Platform as a Service) for demo use, which means you can try NStack without installing the server. Note that the PaaS is intended as a sandbox and the environment is wiped daily at 0600 UTC.
 
-To create a demo account, please go to nstack.com and fill out the demo web form - you'll shortly receive an email with instructions to point your install of the `nstack` tookit to our demo server.
-
-<!--
-run:
-```bash
-$ nstack register
-```
--->
+To create a demo account, please go to https://nstack.com and fill out the demo web form. You'll shortly receive an email with instructions to point your install of the `nstack` tookit to our demo server.
 
 #### Host your own server
 
@@ -78,7 +69,6 @@ sudo dnf install nstack-server
 ```
 
 These are all available on the [releases page](https://github.com/nstack/nstack/releases).
-
 
 ## What do people use NStack for?
 
