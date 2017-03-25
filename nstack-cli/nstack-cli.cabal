@@ -1,0 +1,106 @@
+name: nstack-cli
+version: 0.0.3
+cabal-version: >=1.22
+build-type: Simple
+license: BSD3
+license-file: LICENSE
+copyright: Copyright: (c) 2016 NStack
+maintainer: toolkit@nstack.com
+homepage: https://github.com/nstack/nstack#readme
+synopsis: NStack command line interface
+description: Please see README.md
+category: Cloud
+author: NStack Crew
+data-files:
+    data/client/templates/init/common/nstack.yaml
+    data/client/templates/init/nodejs/service.js
+    data/client/templates/init/python/service.py
+    data/client/templates/init/python/requirements.txt
+    data/client/templates/init/python/setup.py
+    data/client/templates/init/workflow/workflow.nml
+
+library
+  hs-source-dirs:      src
+  ghc-options:         -Wall
+  exposed-modules:
+        NStack.CLI.Auth
+        NStack.CLI.Commands
+        NStack.CLI.Parser
+        NStack.CLI.Templates
+        NStack.CLI.Types
+  build-depends:
+        base >=4.8 && <4.10,
+        bytestring >=0.10.6.0,
+        containers >=0.5.7.1,
+        cryptonite >=0.21,
+        directory >=1.2.2.0,
+        extra >=1.4.10,
+        filepath >=1.4.1.0,
+        file-embed >= 0.0.1.0,
+        foldl >=1.2.1,
+        ghc >= 8.0.1,
+        haskeline >= 0.7,
+        http-client >= 0.5.6.1,
+        http-types >= 0.9.1,
+        optparse-applicative >=0.12.1.0,
+        lens >= 4.15,        
+        mainland-pretty >=0.4.1.4,
+        megaparsec >= 5.2.0,
+        monad-classes >= 0.2,
+        mtl >=2.2.1,
+        mustache >=1.0.2,
+        parsec >=3.1.11,
+        process >=1.2.3.0,
+        system-filepath >=0.4.13.4,
+        text >=1.2.2.1,
+        tree-view >=0.4,
+        turtle >=1.2.8,
+        nstack -any,
+        nstack-prelude -any
+  other-modules:
+        Paths_nstack_cli
+  default-language:    Haskell2010
+  default-extensions: OverloadedStrings FlexibleContexts
+
+executable nstack
+    main-is: NStackCLI.hs
+    build-depends:
+        base >=4.8 && <4.10,
+        bytestring >=0.10.6.0,
+        cereal >=0.5.3.0,
+        connection >=0.2.7,
+        containers >=0.5.7.1,
+        either >= 4.4.1.1,
+        extra >=1.4.10,
+        haskeline >= 0.7,
+        http-client >= 0.5.6.1,
+        http-client-tls >= 0.3.4,
+        http-types >= 0.9.1,
+        lens >= 4.14,
+        mainland-pretty >=0.4.1.4,
+        memory >=0.14.1,
+        monad-classes >= 0.2,
+        mtl >=2.2.1,
+        optparse-applicative >=0.12.1.0,
+        text >=1.2.2.1,
+        turtle >=1.2.8,
+        nstack -any,
+        nstack-prelude -any,
+        nstack-cli -any
+    default-language: Haskell2010
+    default-extensions: OverloadedStrings FlexibleContexts
+    hs-source-dirs: app
+    ghc-options: -Wall -fno-warn-type-defaults -threaded -rtsopts -with-rtsopts=-N -optc-Os -O2
+
+test-suite nstack-cli-test
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Spec.hs
+  build-depends:       base
+                     , nstack-cli
+  ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
+  default-language:    Haskell2010
+
+source-repository head
+  type:     git
+  location: git://github.com/nstack/nstack.git

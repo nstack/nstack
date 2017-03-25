@@ -1,0 +1,6 @@
+module {{ name }} {
+  import Python.Hello:0.0.1 as Hello;
+  // A sample workflow
+  def w = Sources.http<Text> { http_path = "/demo" } | Hello.numChars | Sinks.log<Integer>;
+}
+

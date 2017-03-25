@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- GEdit/Gtksourceview highlighting for module dsl !-->
+<!DOCTYPE language SYSTEM "language.dtd">
+<language id="nml" _name="NStack Workflow" version="2.0" _section="Scientific">
+  <metadata>
+    <property name="mimetypes">text/x-nml;text/x-nmlsrc</property>
+    <property name="globs">*.nml</property>
+  </metadata>
+
+  <styles>
+    <style id="comment" _name="Comment" map-to="def:comment"/>
+    <style id="keyword" _name="Keyword" map-to="def:keyword"/>
+    <style id="type" _name="Data Type" map-to="def:type"/>
+<!--
+    <style id="string" _name="String" map-to="def:string"/>
+    <style id="type" _name="Data Type" map-to="def:type"/>
+    <style id="escaped-character" _name="Escaped Character" map-to="def:special-char"/>
+    <style id="preprocessor" _name="Preprocessor" map-to="def:preprocessor"/>
+    <style id="included-file" _name="Included File" map-to="def:string"/>
+    <style id="char" _name="Character" map-to="def:character"/>
+-->
+  </styles>
+
+  <definitions>
+    <context id="nml">
+      <include>
+        <context id="comment" style-ref="comment" end-at-line-end="true" class="comment" >
+          <start>//</start>
+        </context>
+
+        <context id="comment-multiline" style-ref="comment" class="comment" >
+            <start>/\*</start>
+            <end>\*/</end>
+        </context>
+
+        <context ref="def:decimal"/>
+        <context ref="def:float"/>
+        <context ref="def:string"/>
+        <context id="keywords" style-ref="keyword">
+          <keyword>module</keyword>    
+          <keyword>def</keyword>
+          <keyword>filter</keyword>
+          <keyword>concat</keyword>
+        </context>
+
+        <context id="types" style-ref="type">
+          <keyword>true</keyword>
+          <keyword>false</keyword>
+<!--
+          <keyword>double</keyword>
+-->
+        </context>
+      </include>
+    </context>
+  </definitions>        
+</language>
+

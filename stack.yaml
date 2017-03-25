@@ -1,0 +1,17 @@
+flags: {}
+packages:
+- nstack-prelude
+- nstack
+- nstack-cli
+- location:
+    git: https://github.com/feuerbach/monad-classes.git
+    commit: fb93f7ed0b25a7ac1abfe34c73cac87ae9c772d1
+  extra-dep: true
+extra-deps:
+- d-bus-0.1.5
+- logging-effect-1.1.2
+- mustache-2.1.2
+- tree-view-0.5
+compiler: ghc-8.0.2
+resolver: lts-8.4
+
