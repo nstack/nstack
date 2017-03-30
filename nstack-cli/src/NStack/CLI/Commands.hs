@@ -14,16 +14,21 @@ module NStack.CLI.Commands (
   printInfo,
   printMethods,
   showModuleBuild,
-  showWorkflowBuild
+  showWorkflowBuild,
+  registerCommand,
+  sendCommand
 ) where
 
+import qualified Control.Exception as E
 import qualified Control.Foldl as L
-import Control.Lens ((&), (?~))
+import Control.Lens ((&), (?~), (^.), to, (.~), (^?), _Just)
 import Control.Monad.Except     -- mtl
 import Control.Monad.Trans ()    -- mtl
 import Control.Monad.Extra (whenM) -- mtl
+import Data.Aeson
 import Data.Bifunctor (first)      -- bifunctors
 import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Char8 as BS
 import Data.Char (toLower)
 import Data.Foldable (traverse_)
 import qualified Data.Map as Map
@@ -34,7 +39,11 @@ import Data.Tree (Forest, unfoldForest)
 import Data.Tree.View (showTree)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Filesystem.Path.CurrentOS as FP -- system-filepath
+import Network.HTTP.Client hiding (responseStatus)
+import Network.HTTP.Types.Header (hCookie)
+import Network.Wreq
 import Util ((<||>))                 -- ghc
 import System.Directory (getCurrentDirectory)
 import qualified Text.Mustache as M  -- mustache
@@ -54,9 +63,13 @@ import NStack.Module.ConfigFile (discover, configFile)
 import NStack.Prelude.Applicative ((<&>))
 import NStack.Prelude.FilePath (fpToText, fromFP, toFP)
 import NStack.Prelude.Shell (runCmd_)
-import NStack.Prelude.Monad (eitherToExcept)
+import NStack.Prelude.Monad (eitherToExcept, maybeToExcept)
 import NStack.Prelude.Text (pprT, capitaliseT, prettyT, prettyT')
 import NStack.Settings
+
+type ServerAddr = String
+type Path = String
+type Snippet = String
 
 -- | Available sub commands
 data Command
@@ -73,6 +86,8 @@ data Command
   | ListProcessesCommand
   | GarbageCollectCommand
   | BuildCommand
+  | RegisterCommand UserName Email ServerAddr
+  | SendCommand Path Snippet
   | LoginCommand HostName Int UserId SecretKey
 
 data InitProject = InitProject ModuleName (Maybe Stack) (Maybe ModuleName) -- Name, Stack, Parent Module
@@ -116,7 +131,6 @@ initCommand initStack mBase (GitRepo wantGitRepo) = do
 moduleNameFromDir :: CCmdEff m => R.FilePath -> m ModuleName
 moduleNameFromDir curDir = ((fmap capitaliseT . fpToText . FP.filename $ curDir) <&> (<> ":0.0.1-SNAPSHOT") >>= parseModuleName) `catchError` (\err -> throwError (
   "Your directory name, " <> FP.encodeString curDir <> ", is not a valid module name.\n"
-  <> "Please rename the directory, starting with a capital letter.\n"
   <> err))
 
 -- | Run project git/dir check
@@ -141,8 +155,8 @@ runTemplates curDir projInfo = do
 initGitRepo :: CCmdEff m => m ()
 initGitRepo = liftIO $ do
   runCmd_ "git" ["init"]
-  runCmd_ "git" $ T.words "add ."
-  runCmd_ "git" $ T.words "commit -m 'Initial-Commit'"
+  runCmd_ "git" ["add", "."]
+  runCmd_ "git" ["commit", "-m", "Initial Commit"]
   -- Sh.run "git" ["branch", "nstack"]
 
 -- | Returns the artefacts needed to build a module
@@ -204,3 +218,42 @@ loginSettings hostname port username pw = do modifySettings $ \s -> s & serverCo
                                                                                                      (Just port))
                                                                       & authSettings ?~ (NStackHMAC username pw)
                                              liftIO $ putStrLn "Successfully updated configuration"
+                                             
+
+-- | Attempt to register with the auth server directly from the CLI
+registerCommand :: UserName -> Email -> ServerAddr -> CCmd ()
+registerCommand (UserName userName) (Email email) serverAddr = do
+  eitherToExcept =<< liftIO (callServer `E.catch` wreqErrorHandler)
+  liftIO . TIO.putStrLn $ "Thanks for registering " <> userName <> ", an email will be sent to " <> email <> " shortly"
+  where
+    serverAddr' = "https://" <> serverAddr <> "/register"
+    body = object ["username" .= userName, "email" .= email]
+    callServer = post serverAddr' body >> return (Right ())
+
+sendCommand :: Path -> Snippet -> CCmd ()
+sendCommand path snippet = do
+  event <- mkEvent
+  (HostName serverHost) <- maybeToExcept "server not set in config file" =<< (^? serverConn . _Just . serverHostname . _Just) <$> settings
+  iid <- maybeToExcept "install-id not set in config file" =<< (^? installId . _Just . installUUID) <$> settings
+  -- quick hack to directly add the cookie to the header rather than using wreq/Http.Client cookie handling
+  let opts = defaults & header hCookie .~ [mkIdCookie iid]  
+  eitherToExcept =<< liftIO ((postWith opts (mkServerAddr serverHost) event >> return (Right ())) `E.catch` wreqErrorHandler)
+  liftIO . TIO.putStrLn $ "Event sent successfully"
+  where
+    mkServerAddr serverHost = "http://" <> T.unpack serverHost <> ":8080" <> path
+
+    -- convert snippet to json event we can send
+    mkEvent = do
+      p <- eitherToExcept (eitherDecodeStrict' (encodeUtf8 . T.pack $ snippet) :: Either String Value)
+      return $ object ["params" .= p]
+
+    mkIdCookie iid = BS.pack $ "NSTACKINSTANCEID=" <> show iid
+
+wreqErrorHandler :: HttpException -> IO (Either String ())
+wreqErrorHandler (HttpExceptionRequest _ (StatusCodeException s msg))
+  | s ^. responseStatus . statusCode == 400 = genError msg
+  | otherwise = s ^. responseStatus . statusMessage . to genError
+  where
+    genError = return . Left . T.unpack . decodeUtf8
+wreqErrorHandler s = return . Left . show $ s
+

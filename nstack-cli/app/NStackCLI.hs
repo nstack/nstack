@@ -17,6 +17,7 @@ import qualified Data.ByteString.Char8 as BS
 import Data.ByteString.Lazy (toStrict) -- from: bytestring
 import Data.Maybe (fromMaybe)
 import Data.Serialize (Serialize, encode, decode)
+import Data.List (isSuffixOf)
 import Data.Text (pack, unpack, Text, splitOn, replace, intercalate)
 import qualified Data.Text.IO as TIO
 import Options.Applicative      -- optparse-applicative
@@ -112,7 +113,8 @@ run (BuildCommand) =
       liftIO . putStrLn $ "Building NStack Workflow module " <> pprS modName <> ". Please wait. This may take some time."
       callServer buildWorkflowCommand (WorkflowSrc workflowSrc, modName) showWorkflowBuild
 run (LoginCommand a b c d)    = CLI.loginSettings a b c d
-
+run (RegisterCommand userName email mServer) = CLI.registerCommand userName email mServer
+run (SendCommand path' snippet) = CLI.sendCommand path' snippet
 
 -- | Run a command on the user client
 runClient :: Transport -> CCmd () -> IO ()
@@ -122,13 +124,22 @@ callServer :: ApiCall a b -> a -> (b -> Text) -> CCmd ()
 callServer fn arg formatter = do
   (Transport t) <- ask
   r <- t fn arg
-  printer <- liftInput getExternalPrint
+  printer <- (. addTrailingNewline) <$> liftInput getExternalPrint
   liftIO . printer . unpack $ formatResult formatter r
+  where
+    -- Currently, some messages are not \n-terminated (e.g.  showStartMessage),
+    -- and some are (e.g. megaparsec errors).
+    -- So we need this hack until we develop consistent conventions.
+    addTrailingNewline :: String -> String
+    addTrailingNewline s =
+      if "\n" `isSuffixOf` s
+        then s
+        else s ++ "\n"
 
 formatResult :: (a -> Text) -> Result a -> Text
 formatResult f (Result      a) = f a
-formatResult _ (ClientError e) = "There was an error communicating with the NStack server:\n\n    Error: " <> e
-formatResult _ (ServerError e) = "An error was returned from the NStack Server:\n\n Error: " <> e
+formatResult _ (ClientError e) = "There was an error communicating with the NStack server:\n\nError: " <> e
+formatResult _ (ServerError e) = "An error was returned from the NStack Server:\n\nError: " <> e
 
 serverPath :: IO String
 serverPath = do

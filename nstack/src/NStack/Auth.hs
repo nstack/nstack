@@ -7,13 +7,13 @@ module NStack.Auth where
 
 import Control.Applicative (empty)
 import Control.Lens (Prism', prism', (^.), (^?), re)
-import Control.Monad ((>=>))
-import Crypto.Hash (Digest, digestFromByteString)
+import Control.Monad ((>=>), mfilter)
+import Crypto.Hash (Digest, digestFromByteString, hash)
 import Crypto.Hash.Algorithms (SHA256)
 import Crypto.MAC.HMAC (hmac, HMAC, hmacGetDigest)
 import Data.Aeson
 import Data.Aeson.Types (Parser)
-import Data.ByteArray (ByteArrayAccess, ByteArray)
+import Data.ByteArray (ByteArrayAccess, ByteArray, convert)
 import Data.ByteArray.Encoding (convertFromBase, convertToBase, Base(Base16))
 import Data.ByteString (ByteString)
 import Data.Either.Combinators (rightToMaybe)
@@ -22,6 +22,7 @@ import Data.SafeCopy (SafeCopy)
 import Data.Serialize (Serialize, put, get, Putter, Get)
 import Data.String (IsString)
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import GHC.Generics (Generic)
 import GHC.Prim (coerce)
@@ -32,6 +33,7 @@ import NStack.Prelude.Text (getText, putText)
 type Signature = Digest SHA256
 type Payload = ByteString
 
+-- TODO - unify with author in NStack.Module.Types
 newtype UserName = UserName { _username :: Text }
   deriving (Eq, Ord, Show, Generic, IsString)
 
@@ -48,6 +50,10 @@ hexUserId = prism' (toBase16 . _userId) ((UserId <$>) . fromBase16)
 
 newtype Email = Email { _email :: Text }
   deriving (Eq, Ord, Show, Generic, IsString)
+
+-- NOTE - don't think it's worth doing any more complex validation here
+validEmail :: Prism' Text Email
+validEmail = prism' _email (\x -> Email <$> mfilter (T.any (== '@')) (Just x))
 
 instance FromJSON Email where
   parseJSON a = coerce (parseJSON a :: Parser Text)
@@ -84,10 +90,12 @@ instance FromJSON SecretKey where
 instance ToJSON SecretKey where
   toJSON (SecretKey k) = String $ toBase16 k
 
-data SignedPayload = SignedPayload Signature Payload
+-- The first field is the HMAC of the second field
+-- The second field is the SHA256 hash of the payload
+data SignedPayloadHash = SignedPayloadHash Signature Signature
   deriving Show
 
-data Credentials = Credentials UserId SignedPayload
+data Credentials = Credentials UserId SignedPayloadHash
   deriving Show
 
 data AuthedUser = AuthedUser UserId UserName Email
@@ -110,12 +118,12 @@ instance Serialize Email where
 data Unauthenticated = Unauthenticated
 
 validateCredentials :: Monad m => (UserId -> m (Maybe SecretKey)) -> Credentials -> m Bool
-validateCredentials lookupF (Credentials user (SignedPayload sig payload)) = do
+validateCredentials lookupF (Credentials user (SignedPayloadHash sig payload)) = do
   key <- lookupF user
   return $ maybe False (\k -> sig == reconstruct k payload) key
 
-reconstruct :: SecretKey -> Payload -> Signature
-reconstruct k payload = hmacGetDigest $ hmacSha256 k payload
+reconstruct :: SecretKey -> Digest SHA256 -> Signature
+reconstruct k payload = hmacGetDigest $ hmacSha256 k (convert payload)
 
 hmacSha256 :: SecretKey -> Payload -> HMAC SHA256
 hmacSha256 (SecretKey k) p = hmac k p
@@ -137,7 +145,7 @@ toBase16 = decodeUtf8 . convertToBase Base16
    -}
 
 sign :: (Applicative m, GetPayload a m) => SecretKey -> a -> m Text
-sign k a = toBase16 . reconstruct k <$> getPayload a
+sign k a = toBase16 . reconstruct k . hash <$> getPayload a
 
 getPayload :: (Applicative m, GetPayload a m) => a -> m ByteString
 getPayload a = (<>) <$> getPath a <*> getBody a
