@@ -13,7 +13,6 @@ import Control.Monad.Except (runExceptT, throwError) -- mtl
 import Control.Monad.Extra (ifM) -- mtl
 import Control.Monad.Reader (runReaderT) -- mtl
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as BS
 import Data.ByteString.Lazy (toStrict) -- from: bytestring
 import Data.Maybe (fromMaybe)
 import Data.Serialize (Serialize, encode, decode)
@@ -26,13 +25,11 @@ import System.Exit (exitFailure)
 import qualified Turtle as R        -- turtle
 import Turtle((%), (<>))                  -- turtle
 
-import Network.Connection (TLSSettings(..))
 import Network.HTTP.Client
 import Network.HTTP.Client.TLS (mkManagerSettings)
 import Network.HTTP.Types (ok200)
-import Network.HTTP.Types.Header (hCookie)
 
-import NStack.CLI.Auth (signRequest, addHeader)
+import NStack.CLI.Auth (signRequest, allowSelfSigned)
 import NStack.CLI.Parser (cmds)
 import NStack.CLI.Types
 import NStack.CLI.Commands
@@ -149,43 +146,32 @@ serverPath = do
   return $ "https://" <> unpack domain <> ":" <> show port' <> "/"
     where withDefault = flip fromMaybe
 
--- TODO - we should not accept self-signed certificates; this is a temporary fix until we
--- can embed an NStack root cert in the CLI such that we can sign the server certificates
--- ourselves
-allowSelfSigned :: TLSSettings
-allowSelfSigned = TLSSettingsSimple
-  { settingDisableCertificateValidation = True
-  , settingDisableSession = True
-  , settingUseServerName = False
-  }
-
 callWithHttp :: CCmdEff m => Manager -> String -> ApiCall a b -> a -> m (Result b)
 callWithHttp manager hostname (ApiCall name) args = do
   auth <- (^. authSettings) <$> settings
-  iid <- (^. installId) <$> settings
-  liftIO $ maybe (return $ err) (doCall iid manager path' $ encode args) auth
+  liftIO $ maybe (return $ err) (doCall manager path' $ encode args) auth
     where path' = hostname <> unpack name
           err = ClientError "Missing or invalid credentials. Please run the 'nstack set-server' command as described in your email."
 
 handleHttpErr :: Monad m => HttpException -> m (Result a)
 handleHttpErr e = return . ClientError $ "Exception sending HTTP request: " <> showT e
 
-doCall :: Serialize a => Maybe InstallID -> Manager -> String -> ByteString -> AuthSettings -> IO (Result a)
-doCall iid manager path' body auth = (do
-  request <- signRequest auth . withInstallId iid . withBody body =<< parseRequest path'
-  response <- httpLbs (incTimeout request) manager
+doCall :: Serialize a => Manager -> String -> ByteString -> AuthSettings -> IO (Result a)
+doCall manager path' body auth = (do
+  response <- CLI.callWithCookieJar doCall'
   let status = responseStatus response
   if (status == ok200)
      then (return . either decodeError serverResult . decode . toStrict $ responseBody response)
      else (return . ServerError $ showT status)) `catch` handleHttpErr
-       where decodeError = ClientError . ("Cannot decode return value: " <>) . pack
-             serverResult = either ServerError Result . _serverReturn
-             -- 15 * 60 * 1000 * 1000 == 15 minutes in microseconds
-             incTimeout r = r { responseTimeout = responseTimeoutMicro (15 * 60 * 1000 * 1000) }
+  where decodeError = ClientError . ("Cannot decode return value: " <>) . pack
+        serverResult = either ServerError Result . _serverReturn
+        -- 15 * 60 * 1000 * 1000 == 15 minutes in microseconds
+        incTimeout r = r { responseTimeout = responseTimeoutMicro (15 * 60 * 1000 * 1000) }
 
-withBody :: ByteString -> Request -> Request
-withBody body r = r { requestBody = RequestBodyBS body }
+        doCall' cookieJar' = do
+          signedRequest <- signRequest auth . addBody =<< parseRequest path'
+          (cookieRequest, _) <- insertCookiesIntoRequest signedRequest cookieJar' <$> R.date
+          httpLbs (incTimeout cookieRequest) manager
 
-withInstallId :: Maybe InstallID -> Request -> Request
-withInstallId iid r = maybe r (\i -> r `addHeader` ( hCookie, "NSTACKINSTANCEID=" <> format i)) iid
-  where format i' = BS.pack . show $ i' ^. installUUID
+        addBody :: Request -> Request
+        addBody r = r { requestBody = RequestBodyBS body }

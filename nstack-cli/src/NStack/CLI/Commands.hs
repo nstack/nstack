@@ -16,7 +16,8 @@ module NStack.CLI.Commands (
   showModuleBuild,
   showWorkflowBuild,
   registerCommand,
-  sendCommand
+  sendCommand,
+  callWithCookieJar
 ) where
 
 import qualified Control.Exception as E
@@ -28,7 +29,6 @@ import Control.Monad.Extra (whenM) -- mtl
 import Data.Aeson
 import Data.Bifunctor (first)      -- bifunctors
 import Data.ByteString.Lazy (ByteString)
-import qualified Data.ByteString.Char8 as BS
 import Data.Char (toLower)
 import Data.Foldable (traverse_)
 import qualified Data.Map as Map
@@ -42,10 +42,11 @@ import qualified Data.Text.IO as TIO
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Filesystem.Path.CurrentOS as FP -- system-filepath
 import Network.HTTP.Client hiding (responseStatus)
-import Network.HTTP.Types.Header (hCookie)
-import Network.Wreq
+import Network.HTTP.Client.TLS (mkManagerSettings)
+import Network.Wreq hiding (responseCookieJar)
 import Util ((<||>))                 -- ghc
-import System.Directory (getCurrentDirectory)
+import System.Directory (getCurrentDirectory, getXdgDirectory, XdgDirectory(..))
+import System.IO.Error (isDoesNotExistError)
 import qualified Text.Mustache as M  -- mustache
 import Text.Mustache ((~>))          -- mustache
 import qualified Text.PrettyPrint.Mainland as M
@@ -53,6 +54,7 @@ import Text.PrettyPrint.Mainland ((</>))
 import qualified Turtle as R         -- turtle
 
 import NStack.Auth
+import NStack.CLI.Auth (allowSelfSigned)
 import NStack.CLI.Types
 import NStack.CLI.Templates (createFromTemplate)
 import NStack.Comms.Types (GitRepo(..), ProcessId(..), ModuleInfo(..), ServerInfo(..), MethodType, TypeSignature(..), DSLSource(..))
@@ -66,6 +68,7 @@ import NStack.Prelude.Shell (runCmd_)
 import NStack.Prelude.Monad (eitherToExcept, maybeToExcept)
 import NStack.Prelude.Text (pprT, capitaliseT, prettyT, prettyT')
 import NStack.Settings
+
 
 type ServerAddr = String
 type Path = String
@@ -218,7 +221,7 @@ loginSettings hostname port username pw = do modifySettings $ \s -> s & serverCo
                                                                                                      (Just port))
                                                                       & authSettings ?~ (NStackHMAC username pw)
                                              liftIO $ putStrLn "Successfully updated configuration"
-                                             
+
 
 -- | Attempt to register with the auth server directly from the CLI
 registerCommand :: UserName -> Email -> ServerAddr -> CCmd ()
@@ -234,20 +237,20 @@ sendCommand :: Path -> Snippet -> CCmd ()
 sendCommand path snippet = do
   event <- mkEvent
   (HostName serverHost) <- maybeToExcept "server not set in config file" =<< (^? serverConn . _Just . serverHostname . _Just) <$> settings
-  iid <- maybeToExcept "install-id not set in config file" =<< (^? installId . _Just . installUUID) <$> settings
-  -- quick hack to directly add the cookie to the header rather than using wreq/Http.Client cookie handling
-  let opts = defaults & header hCookie .~ [mkIdCookie iid]  
-  eitherToExcept =<< liftIO ((postWith opts (mkServerAddr serverHost) event >> return (Right ())) `E.catch` wreqErrorHandler)
+  eitherToExcept =<< liftIO (callWithCookieJar (doCall' serverHost event) >> return (Right ()) `E.catch` wreqErrorHandler)
   liftIO . TIO.putStrLn $ "Event sent successfully"
   where
     mkServerAddr serverHost = "http://" <> T.unpack serverHost <> ":8080" <> path
-
     -- convert snippet to json event we can send
     mkEvent = do
       p <- eitherToExcept (eitherDecodeStrict' (encodeUtf8 . T.pack $ snippet) :: Either String Value)
       return $ object ["params" .= p]
 
-    mkIdCookie iid = BS.pack $ "NSTACKINSTANCEID=" <> show iid
+    doCall' serverHost event cookieJar' = do
+      manager' <- newManager $ mkManagerSettings allowSelfSigned Nothing
+      let opts = defaults & cookies .~ (Just cookieJar')
+                          & manager .~ (Right manager')
+      postWith opts (mkServerAddr serverHost) event
 
 wreqErrorHandler :: HttpException -> IO (Either String ())
 wreqErrorHandler (HttpExceptionRequest _ (StatusCodeException s msg))
@@ -257,3 +260,18 @@ wreqErrorHandler (HttpExceptionRequest _ (StatusCodeException s msg))
     genError = return . Left . T.unpack . decodeUtf8
 wreqErrorHandler s = return . Left . show $ s
 
+-- | Wrap up a HTTP Client call to use a file-based cookie jar
+-- should work for HTTP.Client and Wreq (TODO - move nstack-cli fully to wreq)
+-- `CookieJar` has well-behaving Show and Read instances so text-based serialisation should work
+callWithCookieJar :: (CookieJar -> IO (Response body)) -> IO (Response body)
+callWithCookieJar mkRequest = do
+  cookieFilePath <- getXdgDirectory XdgCache "nstack-session.txt"
+  reqCookieJar <- E.catchJust (guard . isDoesNotExistError)
+    (readFile cookieFilePath >>= (return . read :: String -> IO CookieJar))
+    (const . return . createCookieJar $ [])
+
+  res <- mkRequest reqCookieJar
+  -- TODO - we should take in the current cookieJar and update here, wreq should do this automatically
+  -- let (cookieJar', res') = updateCookieJar res
+  writeFile cookieFilePath . show . responseCookieJar $ res
+  return res
