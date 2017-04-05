@@ -37,7 +37,7 @@ http400 :: Lazy.ByteString -> Web.Response
 http400 = Web.responseLBS Http.status400 contentPlaintext
 
 httpOK :: Web.Response
-httpOK = Web.responseLBS Http.status200 contentPlaintext "Msg Accepted"
+httpOK = Web.responseLBS Http.status200 contentPlaintext "Message Accepted"
 
 http404 :: Web.Response
 http404 = Web.responseLBS Http.status404 contentPlaintext "Not Found"

@@ -126,8 +126,9 @@ ordByVersion m@(ModuleName _ _ _ v) m'@(ModuleName _ _ _ v') = if sameNSName m m
 nStackRegistry :: NSUri
 nStackRegistry = NSUri ["registry", "nstack", "com"]
 
+-- TODO - unify with `username` in Auth
 nStackAuthor :: Author
-nStackAuthor = Author "NStack"
+nStackAuthor = Author "nstack"
 
 mkNStackModuleName :: NSUri -> Version -> ModuleName
 mkNStackModuleName = ModuleName nStackRegistry nStackAuthor

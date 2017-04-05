@@ -8,12 +8,13 @@ import Data.String
 import Data.Text (Text, pack)
 import Text.Megaparsec (string, try, (<?>))    -- from: megaparsec
 
-import NStack.Auth (hexUserId, textSecretKey)
+import NStack.Auth (hexUserId, textSecretKey, UserName(..), validEmail)
 import NStack.CLI.Commands (Command(..), InitStack(..))
 import NStack.Comms.Types
 import NStack.Module.Parser (pStack, inlineParser)
 import NStack.Module.Types (DebugOpt(..), BaseImage(..), ModuleName(..))
 import NStack.Module.Parser (parseModuleName)
+import NStack.Prelude.Monad (maybeToRight)
 
 import Options.Applicative       -- optparse-applicative
 
@@ -73,6 +74,20 @@ initOpts =  InitCommand
     pInitStack' :: ReadM InitStack
     pInitStack' = eitherReader (runExcept . pInitStack . pack)
 
+-- | Parser for the register command options
+regOpts :: Parser Command
+regOpts = RegisterCommand <$> (UserName . pack <$> argument str (metavar "username" <> help "User name to register with"))
+                          <*> argument pEmail (metavar "email" <> help "Email to register with")
+                          <*> serverFlag
+  where
+    pEmail = eitherReader $ (\x -> maybeToRight "Not a valid email address" (pack x ^? validEmail))
+    serverFlag = option str (long "server" <> short 's' <> help "NStack Registry Server" <> showDefault <> value "demo-register.nstack.com:8443" <> metavar "SERVER")
+
+-- | Parser for the register command options
+sendOpts :: Parser Command
+sendOpts = SendCommand <$> (argument str (metavar "path" <> help "Path the source was created on"))
+                       <*> argument str (metavar "event" <> help "JSON Snippet to send as an event")
+
 listOpts :: Parser Command
 listOpts = hsubparser
   (  command "modules"   (info (pure ListModulesCommand) (progDesc "List all available modules"))
@@ -90,6 +105,7 @@ loginOpts = LoginCommand <$> argument (fromString <$> str) (metavar "SERVER_HOST
                          <*> argument secretKey (metavar "SECRET_KEY")
             where userId    = maybeReader $ (^? hexUserId) . fromString
                   secretKey = maybeReader $ (^? textSecretKey) . fromString
+
 -- | Parser for all subcommand options
 cmds :: Parser Command
 cmds =  hsubparser ( command "info" (info (InfoCommand <$> allSwitch) (progDesc "Show the server status"))
@@ -105,5 +121,7 @@ cmds =  hsubparser ( command "info" (info (InfoCommand <$> allSwitch) (progDesc 
                 <>  command "server-logs" (info (pure ServerLogsCommand) (progDesc "Show the nstack server's logs"))
                 <>  command "gc" (info (pure GarbageCollectCommand) (progDesc "Garbage collect images"))
                 <>  command "set-server" (info loginOpts (progDesc "Set authentication config for remote server"))
+                <>  command "register" (info regOpts (progDesc "Register user with the NStack Demo Server"))
+                <>  command "send" (info sendOpts (progDesc "Send event to HTTP Source on NStack Server"))
                   )
           <|> hsubparser (command "log" (info logsOpts (progDesc "Show the logs of a running process")) <> internal)

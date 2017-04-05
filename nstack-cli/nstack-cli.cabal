@@ -1,5 +1,5 @@
 name: nstack-cli
-version: 0.0.3
+version: 0.0.3.2
 cabal-version: >=1.22
 build-type: Simple
 license: BSD3
@@ -30,7 +30,10 @@ library
         NStack.CLI.Types
   build-depends:
         base >=4.8 && <4.10,
+        aeson >= 1.0.2.1,
+        wreq >= 0.5.0.0,
         bytestring >=0.10.6.0,
+        connection >=0.2.7,
         containers >=0.5.7.1,
         cryptonite >=0.21,
         directory >=1.2.2.0,
@@ -41,6 +44,7 @@ library
         ghc >= 8.0.1,
         haskeline >= 0.7,
         http-client >= 0.5.6.1,
+        http-client-tls >= 0.3.4,
         http-types >= 0.9.1,
         optparse-applicative >=0.12.1.0,
         lens >= 4.15,        

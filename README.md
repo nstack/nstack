@@ -55,7 +55,10 @@ Download `nstack-cli-{osx,win}.zip` for your platform, unzip, and run `nstack` f
 
 #### Linux
 
-We provide RPM and DEB packages on the [releases page](https://github.com/nstack/nstack/releases) that will work for most common distros. We also have `yum` and `apt` repositories for Redhat and Debian- derived OSs that are updated on each release.
+We provide RPM and DEB packages on the [releases page](https://github.com/nstack/nstack/releases) that will work for most common distros. 
+
+<!--
+We also have `yum` and `apt` repositories for Redhat and Debian- derived OSs that are updated on each release.
 
 ##### RedHat / Fedora / OpenSuse RPMs
 
@@ -75,6 +78,7 @@ sudo wget -O /etc/sources.list.d/nstack.list http://distrepos.nstack.com/debian/
 sudo apt-get update
 sudo apt-get install nstack-cli
 ```
+-->
 
 ### Server Installation
 
@@ -90,14 +94,16 @@ To install your own NStack server, we provide a self-contained appliance VM:
 - an AMI for AWS EC2 (`ami-53a47245`)
 - a `.raw` disk image for hosting on your virtual machine of choice
 
+We also provide an RPM for installing directly on a Red Hat-like server. These are all available on the [releases page](https://github.com/nstack/nstack/releases).
+
+<!--
 We also provide an RPM and an associated Yum repository for installing directly on a Red Hat-like server
 
 ```bash
 sudo wget -O /etc/yum.repos.d/nstack.repo http://distrepos.nstack.com/redhat/nstack.repo
 sudo dnf install nstack-server
 ```
-
-These are all available on the [releases page](https://github.com/nstack/nstack/releases).
+-->
 
 ## What do people use NStack for?
 

@@ -69,7 +69,7 @@ instance FromJSON ServerDetails where
 
 instance ToJSON ServerDetails where
   toJSON (ServerDetails h p) = object ["hostname" .= h,
-                                       "post" .= p]
+                                       "port" .= p]
 
 instance FromJSON AuthSettings where
   parseJSON (Object o) =  (mfilter (=="nstack") (o .: "scheme" :: Parser Text) *> (NStackHMAC <$> o .: "user-id" <*> o .: "secret-key")) <|>

@@ -14,14 +14,19 @@ module NStack.CLI.Commands (
   printInfo,
   printMethods,
   showModuleBuild,
-  showWorkflowBuild
+  showWorkflowBuild,
+  registerCommand,
+  sendCommand,
+  callWithCookieJar
 ) where
 
+import qualified Control.Exception as E
 import qualified Control.Foldl as L
-import Control.Lens ((&), (?~))
+import Control.Lens ((&), (?~), (^.), to, (.~), (^?), _Just)
 import Control.Monad.Except     -- mtl
 import Control.Monad.Trans ()    -- mtl
 import Control.Monad.Extra (whenM) -- mtl
+import Data.Aeson
 import Data.Bifunctor (first)      -- bifunctors
 import Data.ByteString.Lazy (ByteString)
 import Data.Char (toLower)
@@ -34,9 +39,14 @@ import Data.Tree (Forest, unfoldForest)
 import Data.Tree.View (showTree)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Filesystem.Path.CurrentOS as FP -- system-filepath
+import Network.HTTP.Client hiding (responseStatus)
+import Network.HTTP.Client.TLS (mkManagerSettings)
+import Network.Wreq hiding (responseCookieJar)
 import Util ((<||>))                 -- ghc
-import System.Directory (getCurrentDirectory)
+import System.Directory (getCurrentDirectory, getXdgDirectory, XdgDirectory(..))
+import System.IO.Error (isDoesNotExistError)
 import qualified Text.Mustache as M  -- mustache
 import Text.Mustache ((~>))          -- mustache
 import qualified Text.PrettyPrint.Mainland as M
@@ -44,6 +54,7 @@ import Text.PrettyPrint.Mainland ((</>))
 import qualified Turtle as R         -- turtle
 
 import NStack.Auth
+import NStack.CLI.Auth (allowSelfSigned)
 import NStack.CLI.Types
 import NStack.CLI.Templates (createFromTemplate)
 import NStack.Comms.Types (GitRepo(..), ProcessId(..), ModuleInfo(..), ServerInfo(..), MethodType, TypeSignature(..), DSLSource(..))
@@ -54,9 +65,14 @@ import NStack.Module.ConfigFile (discover, configFile)
 import NStack.Prelude.Applicative ((<&>))
 import NStack.Prelude.FilePath (fpToText, fromFP, toFP)
 import NStack.Prelude.Shell (runCmd_)
-import NStack.Prelude.Monad (eitherToExcept)
+import NStack.Prelude.Monad (eitherToExcept, maybeToExcept)
 import NStack.Prelude.Text (pprT, capitaliseT, prettyT, prettyT')
 import NStack.Settings
+
+
+type ServerAddr = String
+type Path = String
+type Snippet = String
 
 -- | Available sub commands
 data Command
@@ -73,6 +89,8 @@ data Command
   | ListProcessesCommand
   | GarbageCollectCommand
   | BuildCommand
+  | RegisterCommand UserName Email ServerAddr
+  | SendCommand Path Snippet
   | LoginCommand HostName Int UserId SecretKey
 
 data InitProject = InitProject ModuleName (Maybe Stack) (Maybe ModuleName) -- Name, Stack, Parent Module
@@ -116,7 +134,6 @@ initCommand initStack mBase (GitRepo wantGitRepo) = do
 moduleNameFromDir :: CCmdEff m => R.FilePath -> m ModuleName
 moduleNameFromDir curDir = ((fmap capitaliseT . fpToText . FP.filename $ curDir) <&> (<> ":0.0.1-SNAPSHOT") >>= parseModuleName) `catchError` (\err -> throwError (
   "Your directory name, " <> FP.encodeString curDir <> ", is not a valid module name.\n"
-  <> "Please rename the directory, starting with a capital letter.\n"
   <> err))
 
 -- | Run project git/dir check
@@ -141,8 +158,8 @@ runTemplates curDir projInfo = do
 initGitRepo :: CCmdEff m => m ()
 initGitRepo = liftIO $ do
   runCmd_ "git" ["init"]
-  runCmd_ "git" $ T.words "add ."
-  runCmd_ "git" $ T.words "commit -m 'Initial-Commit'"
+  runCmd_ "git" ["add", "."]
+  runCmd_ "git" ["commit", "-m", "Initial Commit"]
   -- Sh.run "git" ["branch", "nstack"]
 
 -- | Returns the artefacts needed to build a module
@@ -204,3 +221,57 @@ loginSettings hostname port username pw = do modifySettings $ \s -> s & serverCo
                                                                                                      (Just port))
                                                                       & authSettings ?~ (NStackHMAC username pw)
                                              liftIO $ putStrLn "Successfully updated configuration"
+
+
+-- | Attempt to register with the auth server directly from the CLI
+registerCommand :: UserName -> Email -> ServerAddr -> CCmd ()
+registerCommand (UserName userName) (Email email) serverAddr = do
+  eitherToExcept =<< liftIO (callServer `E.catch` wreqErrorHandler)
+  liftIO . TIO.putStrLn $ "Thanks for registering " <> userName <> ", an email will be sent to " <> email <> " shortly"
+  where
+    serverAddr' = "https://" <> serverAddr <> "/register"
+    body = object ["username" .= userName, "email" .= email]
+    callServer = post serverAddr' body >> return (Right ())
+
+sendCommand :: Path -> Snippet -> CCmd ()
+sendCommand path snippet = do
+  event <- mkEvent
+  (HostName serverHost) <- maybeToExcept "server not set in config file" =<< (^? serverConn . _Just . serverHostname . _Just) <$> settings
+  eitherToExcept =<< liftIO (callWithCookieJar (doCall' serverHost event) >> return (Right ()) `E.catch` wreqErrorHandler)
+  liftIO . TIO.putStrLn $ "Event sent successfully"
+  where
+    mkServerAddr serverHost = "http://" <> T.unpack serverHost <> ":8080" <> path
+    -- convert snippet to json event we can send
+    mkEvent = do
+      p <- eitherToExcept (eitherDecodeStrict' (encodeUtf8 . T.pack $ snippet) :: Either String Value)
+      return $ object ["params" .= p]
+
+    doCall' serverHost event cookieJar' = do
+      manager' <- newManager $ mkManagerSettings allowSelfSigned Nothing
+      let opts = defaults & cookies .~ (Just cookieJar')
+                          & manager .~ (Right manager')
+      postWith opts (mkServerAddr serverHost) event
+
+wreqErrorHandler :: HttpException -> IO (Either String ())
+wreqErrorHandler (HttpExceptionRequest _ (StatusCodeException s msg))
+  | s ^. responseStatus . statusCode == 400 = genError msg
+  | otherwise = s ^. responseStatus . statusMessage . to genError
+  where
+    genError = return . Left . T.unpack . decodeUtf8
+wreqErrorHandler s = return . Left . show $ s
+
+-- | Wrap up a HTTP Client call to use a file-based cookie jar
+-- should work for HTTP.Client and Wreq (TODO - move nstack-cli fully to wreq)
+-- `CookieJar` has well-behaving Show and Read instances so text-based serialisation should work
+callWithCookieJar :: (CookieJar -> IO (Response body)) -> IO (Response body)
+callWithCookieJar mkRequest = do
+  cookieFilePath <- getXdgDirectory XdgCache "nstack-session.txt"
+  reqCookieJar <- E.catchJust (guard . isDoesNotExistError)
+    (readFile cookieFilePath >>= (return . read :: String -> IO CookieJar))
+    (const . return . createCookieJar $ [])
+
+  res <- mkRequest reqCookieJar
+  -- TODO - we should take in the current cookieJar and update here, wreq should do this automatically
+  -- let (cookieJar', res') = updateCookieJar res
+  writeFile cookieFilePath . show . responseCookieJar $ res
+  return res

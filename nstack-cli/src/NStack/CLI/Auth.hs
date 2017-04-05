@@ -3,13 +3,15 @@
 
 module NStack.CLI.Auth (
   signRequest,
-  addHeader
-) where
+  addHeader,
+  allowSelfSigned
+  ) where
 
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict)
 import Data.Monoid ((<>))
 import Data.Text.Encoding (encodeUtf8)
+import Network.Connection (TLSSettings(..))
 import Network.HTTP.Client
 import Network.HTTP.Types (Header)
 import Network.HTTP.Types.Header (hAuthorization)
@@ -40,3 +42,13 @@ instance GetPayload Request IO where
           get (RequestBodyBS  b)  = return b
           get (RequestBodyIO  b)  = b >>= get
           get _                   = return "NOT YET IMPLEMENTED" -- We don't support signing streamed bodies right now
+
+-- TODO - we should not accept self-signed certificates; this is a temporary fix until we
+-- can embed an NStack root cert in the CLI such that we can sign the server certificates
+-- ourselves
+allowSelfSigned :: TLSSettings
+allowSelfSigned = TLSSettingsSimple
+  { settingDisableCertificateValidation = True
+  , settingDisableSession = True
+  , settingUseServerName = False
+  }
