@@ -2,11 +2,44 @@
 
 ## Introduction
 
+![Introduction](https://cdn.rawgit.com/nstack/nstack/ebe779d9f560ba618b7804bbdceaa589801ea2ff/images/readme-flowchart-intro.svg)
+
 NStack is a compute platform which is ideal for data analytics because it makes integrating data, productionising code, and connecting it to that data really simple. Firstly, it provides a way to turn disparate data-sources -- such as databases, 3rd-party APIs, or HTTP endpoints -- into streams of typed records. Secondly, it provides a way to publish local code as *functions* on your cloud provider. These streams can be composed with these functions using NStack's scripting language, and NStack automates all underlying infrastructure so you can focus on data-science instead of operations.
 
-NStack is platform-agnostic, which means it can run anywhere.
+
+### Example
+
+![Example](https://cdn.rawgit.com/nstack/nstack/ebe779d9f560ba618b7804bbdceaa589801ea2ff/images/readme-flowchart-example.svg)
+
+We can express this within the NStack scripting language locally as follows, just think of it as Bash for containerised microservices,
+
+```fsharp
+module Demo:0.0.1 {
+  import NStack.Transforms:latest as T
+  import Acme.Classifier:latest as C
+
+  // our analytics workflow
+  def workflow = Source.Postgres<Int, Int> 
+                 | T.transform
+                 | C.classify
+                 | Sink.RabbitMq<String>
+}
+```
+
+We can then build, deploy, and start this workflow on an NStack Server from the NStack CLI on Linux, macOS, or Windows.
+
+```bash
+> nstack build
+Building Demo:0.0.1.
+> nstack start Demo:0.0.1.workflow
+Workflow started as process 3.
+```
+
+
+<!-- NStack is platform-agnostic, which means it can run anywhere. -->
 
 See the [website](https://nstack.com) for more information, or check out the [full documentation](https://docs.nstack.com).
+
 
 ## Getting Started
 
