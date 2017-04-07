@@ -47,15 +47,13 @@ NStack is comprised of a CLI which runs on your machine, and a virtual machine w
 
 ### CLI Installation
 
-Our CLI is available for Linux, Mac, and Windows and the latest version can be downloaded on the [releases page](https://github.com/nstack/nstack/releases). On each platform, the CLI is distributed as a self-contained executable.
+Our CLI is available for Linux, Mac, and Windows and the latest pre-compiled versions can be downloaded on our [releases page](https://github.com/nstack/nstack/releases). the CLI is distributed as a self-contained compressed executable for Linux, Windows, and macOS.
 
-#### Mac and Windows
-
-Download `nstack-cli-{osx,win}.zip` for your platform, unzip, and run `nstack` from the Terminal/Command Prompt
+Download `nstack-cli-{linux64,win64,macOS}` for your platform, uncompress, and run `nstack` from the Terminal/Command Prompt
 
 #### Linux
 
-We provide RPM and DEB packages on the [releases page](https://github.com/nstack/nstack/releases) that will work for most common distros. 
+We also provide RPM and DEB packages on the [releases page](https://github.com/nstack/nstack/releases) that will work for most common distros. 
 
 <!--
 We also have `yum` and `apt` repositories for Redhat and Debian- derived OSs that are updated on each release.
@@ -79,6 +77,35 @@ sudo apt-get update
 sudo apt-get install nstack-cli
 ```
 -->
+
+##### RPM Install
+
+```bash
+# change {version} as needed
+dnf install https://github.com/nstack/nstack/releases/v{version}/nstack-cli-{version}.x86_64.rpm
+```
+
+##### DEB Install
+
+```bash
+# change {version} as needed
+wget https://github.com/nstack/nstack/releases/v{version}/nstack-cli_{version}.amd64.deb
+dpkg -i nstack-cli_{version}.amd64.deb
+apt-get install -f
+```
+
+#### Compiling from source
+
+NStack is built using [Haskell](https://wwww.haskell.org), and to compile the CLI you will need the [Stack](https://www.haskellstack.org/
+) build tool install. Once this is done, just run the following commands from the checked-out project source directory
+
+```bash
+# setup only needed on first compile
+stack setup
+stack build nstack-cli
+# install to user's local executable directory
+stack install nstack-cli
+```
 
 ### Server Installation
 
