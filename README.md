@@ -4,7 +4,7 @@
 
 ![Introduction](https://cdn.rawgit.com/nstack/nstack/ebe779d9f560ba618b7804bbdceaa589801ea2ff/images/readme-flowchart-intro.svg)
 
-NStack is a compute platform which is ideal for data analytics because it makes integrating data, productionising code, and connecting it to that data really simple.
+NStack is a compute platform. It is ideal for data analytics because it makes integrating data, productionising code, and connecting it to that data really simple.
 <!-- Think of it like Bash-like, type-safe, piping for containerised microservices that live on your cloud. -->
 Firstly, it provides a way to turn disparate data-sources -- such as databases, 3rd-party APIs, or HTTP endpoints -- into streams of typed records. Secondly, it provides a way to publish local code as *functions* on your cloud provider. 
 These streams can be composed with these functions using NStack's scripting language, and NStack automates all underlying infrastructure so you can focus on data-science instead of operations.
@@ -18,14 +18,14 @@ We can express this within the NStack scripting language locally as follows, jus
 
 ```fsharp
 module Demo:0.1.0 {
-  import NStack.Transforms:0.1.4 as T
-  import Acme.Classifier:0.3.0 as C
+  import NStack.Transformers:0.1.4 as T
+  import Acme.Classifiers:0.3.0 as C
 
   // our analytics workflow
-  def workflow = Source.postgresql<(Int, Int)> 
-                 | T.transform
-                 | C.classify
-                 | Sink.s3blob<Text>
+  def workflow = Sources.Postgresql<(Int, Int, Text, CustomerRecord)> 
+                 | T.transform { strength = 5 }
+                 | C.classify { model = "RandomForest" }
+                 | Sinks.S3blob<Text>
 }
 ```
 
@@ -33,8 +33,8 @@ We can then build, deploy, and start this workflow on an NStack Server from the 
 
 ```bash
 > nstack build
-Building Demo:0.0.1.
-> nstack start Demo:0.0.1.workflow
+Building Demo:0.1.0
+> nstack start Demo:0.1.0.workflow
 Workflow started as process 3.
 ```
 
