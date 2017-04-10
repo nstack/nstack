@@ -2,7 +2,7 @@
 
 ## Introduction
 
-![Introduction](https://cdn.rawgit.com/nstack/nstack/ebe779d9f560ba618b7804bbdceaa589801ea2ff/images/readme-flowchart-intro.svg)
+![Introduction](https://cdn.rawgit.com/nstack/nstack/c67fd1a9/images/readme-flowchart-intro.svg)
 
 NStack is a compute platform. It is ideal for data analytics because it makes integrating data, productionising code, and connecting it to that data really simple.
 <!-- Think of it like Bash-like, type-safe, piping for containerised microservices that live on your cloud. -->
@@ -12,7 +12,7 @@ These streams can be composed with these functions using NStack's scripting lang
 
 ### Example
 
-![Example](https://cdn.rawgit.com/nstack/nstack/ebe779d9f560ba618b7804bbdceaa589801ea2ff/images/readme-flowchart-example.svg)
+![Example](https://cdn.rawgit.com/nstack/nstack/c67fd1a9/images/readme-flowchart-example.svg)
 
 We can express this within the NStack scripting language locally as follows, just think of it as Bash for containerised microservices,
 
