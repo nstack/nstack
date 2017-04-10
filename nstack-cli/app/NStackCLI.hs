@@ -21,6 +21,7 @@ import Data.Text (pack, unpack, Text, splitOn, replace, intercalate)
 import qualified Data.Text.IO as TIO
 import Options.Applicative      -- optparse-applicative
 import System.Console.Haskeline (runInputT, defaultSettings, getExternalPrint)
+import System.Info (os)
 import System.Exit (exitFailure)
 import qualified Turtle as R        -- turtle
 import Turtle((%), (<>))                  -- turtle
@@ -39,7 +40,7 @@ import NStack.Comms.Types
 import NStack.Module.ConfigFile (configFile, workflowFile, projectFile, getProjectFile, _projectModules, _cfgName, getConfigFile)
 import NStack.Module.Parser (getDslName)
 import NStack.Prelude.FilePath (fromFP)
-import NStack.Prelude.Text (pprT, prettyLinesOr, joinLines, pprS, showT)
+import NStack.Prelude.Text (pprT, prettyLinesOr, joinLines, showT)
 import NStack.Settings
 import NStack.Utils.Debug (versionMsg)
 
@@ -75,8 +76,11 @@ run :: Command -> CCmd ()
 run (InitCommand initStack mBase gitRepo) = CLI.initCommand initStack mBase gitRepo
 run (StartCommand debug dsl) = callServer startCommand (addImport dsl, debug) CLI.showStartMessage
 run (NotebookCommand debug mDsl) = do
-      dsl <- maybe (liftIO $ DSLSource <$> TIO.getContents) pure mDsl
-      callServer startCommand (dsl, debug) CLI.showStartMessage
+  liftIO . putStrLn $ "NStack Notebook - import modules, write a workflow, and press " <> endStream <> " when finished to start it: "
+  dsl <- maybe (liftIO $ DSLSource <$> TIO.getContents) pure mDsl
+  liftIO . putStrLn $ "Building and running NStack Workflow. Please wait. This may take some time."
+  callServer startCommand (dsl, debug) CLI.showStartMessage
+  where endStream = if os == "mingw32" then "<Ctrl-Z>" else "<Ctrl-D>"
 run (StopCommand pId)         = callServer stopCommand pId CLI.showStopMessage
 run (LogsCommand pId)         = callServer logsCommand pId catLogs
 run ServerLogsCommand         = callServer serverLogsCommand () catLogs
@@ -100,14 +104,14 @@ run (BuildCommand) =
       forM_ modules (\modPath -> R.cd modPath >> run BuildCommand >> R.cd projectPath)
     containerModule = do
       modName <- _cfgName <$> (R.pwd >>= getConfigFile)
-      liftIO . putStrLn $ "Building NStack Container module " <> pprS modName <> ". Please wait. This may take some time."
+      liftIO . putStrLn $ "Building NStack Container module " <> unpack (CLI.localModName modName) <> ". Please wait. This may take some time."
       package <- CLI.buildArtefacts
       callServer buildCommand (BuildTarball $ toStrict package) showModuleBuild
     workflowModule = do
       -- TODO - can we parse the workflow on client to surface syntatic errors quicker?
       workflowSrc <- liftIO . TIO.readFile . fromFP $ workflowFile
       modName <- getDslName workflowSrc
-      liftIO . putStrLn $ "Building NStack Workflow module " <> pprS modName <> ". Please wait. This may take some time."
+      liftIO . putStrLn $ "Building NStack Workflow module " <> unpack (CLI.localModName modName) <> ". Please wait. This may take some time."
       callServer buildWorkflowCommand (WorkflowSrc workflowSrc, modName) showWorkflowBuild
 run (LoginCommand a b c d)    = CLI.loginSettings a b c d
 run (RegisterCommand userName email mServer) = CLI.registerCommand userName email mServer

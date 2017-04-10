@@ -138,7 +138,8 @@ showShortModuleName :: ModuleName -> String
 showShortModuleName ModuleName{..} = T.unpack $ reg <> aut <> showT _mName <> ":" <> showT _mVersion
   where
     reg = if _mRegistry == nStackRegistry then "" else showT _mRegistry <> "/"
-    aut = if _mAuthor == nStackAuthor then "" else _author _mAuthor <> "/"
+    -- changing to always show author for now, rather than hiding if aut == nStackAuthor
+    aut = _author _mAuthor <> "/"
 
 
 instance Serialize Release

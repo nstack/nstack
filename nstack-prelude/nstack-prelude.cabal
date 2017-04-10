@@ -1,5 +1,5 @@
 name: nstack-prelude
-version: 0.0.3.2
+version: 0.0.3.4
 cabal-version: >=1.22
 build-type: Simple
 license: BSD3

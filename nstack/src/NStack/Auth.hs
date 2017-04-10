@@ -2,6 +2,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module NStack.Auth where
 
@@ -36,6 +37,11 @@ type Payload = ByteString
 -- TODO - unify with author in NStack.Module.Types
 newtype UserName = UserName { _username :: Text }
   deriving (Eq, Ord, Show, Generic, IsString)
+
+nstackUserName :: UserName
+nstackUserName = UserName "nstack"
+
+instance SafeCopy UserName
 
 instance FromJSON UserName where
   parseJSON a = coerce (parseJSON a :: Parser Text)

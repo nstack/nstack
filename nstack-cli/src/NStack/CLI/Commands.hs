@@ -11,6 +11,7 @@ module NStack.CLI.Commands (
   loginSettings,
   showStartMessage,
   showStopMessage,
+  localModName,
   printInfo,
   printMethods,
   showModuleBuild,
@@ -31,6 +32,7 @@ import Data.Bifunctor (first)      -- bifunctors
 import Data.ByteString.Lazy (ByteString)
 import Data.Char (toLower)
 import Data.Foldable (traverse_)
+import Data.Functor (($>))
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe, isNothing)
 import Data.Monoid ((<>))
@@ -58,7 +60,7 @@ import NStack.CLI.Auth (allowSelfSigned)
 import NStack.CLI.Types
 import NStack.CLI.Templates (createFromTemplate)
 import NStack.Comms.Types (GitRepo(..), ProcessId(..), ModuleInfo(..), ServerInfo(..), MethodType, TypeSignature(..), DSLSource(..))
-import NStack.Module.Types (Stack, BaseImage(..), DebugOpt(..), ModuleName(..), MethodURI(..))
+import NStack.Module.Types (Stack, BaseImage(..), DebugOpt(..), ModuleName(..), MethodURI(..), showShortModuleName)
 import NStack.Module.Parser (parseModuleName)
 import qualified NStack.Utils.Archive as Archive
 import NStack.Module.ConfigFile (discover, configFile)
@@ -68,7 +70,6 @@ import NStack.Prelude.Shell (runCmd_)
 import NStack.Prelude.Monad (eitherToExcept, maybeToExcept)
 import NStack.Prelude.Text (pprT, capitaliseT, prettyT, prettyT')
 import NStack.Settings
-
 
 type ServerAddr = String
 type Path = String
@@ -93,7 +94,7 @@ data Command
   | SendCommand Path Snippet
   | LoginCommand HostName Int UserId SecretKey
 
-data InitProject = InitProject ModuleName (Maybe Stack) (Maybe ModuleName) -- Name, Stack, Parent Module
+data InitProject = InitProject Text (Maybe Stack) (Maybe ModuleName) -- Name, Stack, Parent Module
 
 instance M.ToMustache InitProject where
   toMustache (InitProject name stack parent) = M.object
@@ -108,33 +109,33 @@ data InitStack = InitWorkflow | InitFramework | InitStack Stack
 initCommand :: CCmdEff m => InitStack -> Maybe BaseImage -> GitRepo -> m ()
 initCommand initStack mBase (GitRepo wantGitRepo) = do
   curDir <- R.pwd
-  moduleName <- moduleNameFromDir curDir
+  tModuleName <- moduleNameFromDir curDir
   _ <- whenNotExistingProject
   (templateDirs, initProj) <- case initStack of
-    InitWorkflow -> return (["workflow"], InitProject moduleName Nothing Nothing)
+    InitWorkflow -> return (["workflow"], InitProject tModuleName Nothing Nothing)
     InitFramework -> do
       iParentName <- parseModuleName . _baseImage $ baseImage
-      return (["framework"], InitProject moduleName Nothing (Just iParentName))
+      return (["framework"], InitProject tModuleName Nothing (Just iParentName))
     (InitStack stack) -> do
       iParentName <- parseModuleName . _baseImage $ baseImage
-      return (["common", map toLower . show $ stack], InitProject moduleName (Just stack) (Just iParentName))
+      return (["common", map toLower . show $ stack], InitProject tModuleName (Just stack) (Just iParentName))
   -- copy the init files into the module dir
   liftIO $ mapM_ (createFromTemplate (fromFP curDir)) templateDirs
   -- run the template over them
   runTemplates curDir initProj
   when wantGitRepo initGitRepo
-  liftIO . TIO.putStrLn $ "Module '" <> pprT moduleName <> "' successfully initialised at " <> T.pack (fromFP curDir)
+  liftIO . TIO.putStrLn $ "Module '" <> pprT tModuleName <> "' successfully initialised at " <> T.pack (fromFP curDir)
   where
     -- hardcode the default image and version number temporarily
     baseImage = flip fromMaybe mBase $ case initStack of
-      (InitStack stack) -> BaseImage . T.pack $ "NStack."++show stack++":0.24.0"
-      _ -> BaseImage . T.pack $ "NStack.Python:0.24.0"
+      (InitStack stack) -> BaseImage . T.pack $ "NStack."++show stack++":0.25.0"
+      _ -> BaseImage . T.pack $ "NStack.Python:0.25.0"
 
 -- | Extract the module name from the current directory
-moduleNameFromDir :: CCmdEff m => R.FilePath -> m ModuleName
+moduleNameFromDir :: CCmdEff m => R.FilePath -> m Text
 moduleNameFromDir curDir = ((fmap capitaliseT . fpToText . FP.filename $ curDir) <&> (<> ":0.0.1-SNAPSHOT") >>= parseModuleName) `catchError` (\err -> throwError (
   "Your directory name, " <> FP.encodeString curDir <> ", is not a valid module name.\n"
-  <> err))
+  <> err)) >>= return . localModName
 
 -- | Run project git/dir check
 whenNotExistingProject  :: CCmdEff m => m ()
@@ -205,10 +206,15 @@ block :: String -> [M.Doc] -> M.Doc
 block label stack = M.text label </> M.indent 4 (M.stack stack) </> M.empty
 
 showStartMessage :: (DSLSource, ProcessId) -> Text
-showStartMessage ((DSLSource dsl), (ProcessId pId)) = "Started " <> dsl <> " as process " <> pId
+showStartMessage ((DSLSource _), (ProcessId pId)) = "Successfully started as process " <> pId
 
 showStopMessage :: ProcessId -> Text
 showStopMessage (ProcessId pId) = "Successfully stopped process " <> pId
+
+-- HACK - to remove once we have username on CLI / remove modulename parsing
+-- Currently used to display the ModuleName on the CLI without the default `nstack` author
+localModName :: ModuleName -> T.Text
+localModName = last . T.splitOn "nstack/" . T.pack . showShortModuleName
 
 showModuleBuild :: ModuleName -> Text
 showModuleBuild mName = "Module " <> pprT mName <> " built successfully. Use `nstack list functions` to see all available functions."
@@ -231,13 +237,13 @@ registerCommand (UserName userName) (Email email) serverAddr = do
   where
     serverAddr' = "https://" <> serverAddr <> "/register"
     body = object ["username" .= userName, "email" .= email]
-    callServer = post serverAddr' body >> return (Right ())
+    callServer = post serverAddr' body $> Right ()
 
 sendCommand :: Path -> Snippet -> CCmd ()
 sendCommand path snippet = do
   event <- mkEvent
   (HostName serverHost) <- maybeToExcept "server not set in config file" =<< (^? serverConn . _Just . serverHostname . _Just) <$> settings
-  eitherToExcept =<< liftIO (callWithCookieJar (doCall' serverHost event) >> return (Right ()) `E.catch` wreqErrorHandler)
+  eitherToExcept =<< liftIO (callServer serverHost event `E.catch` wreqErrorHandler)
   liftIO . TIO.putStrLn $ "Event sent successfully"
   where
     mkServerAddr serverHost = "http://" <> T.unpack serverHost <> ":8080" <> path
@@ -246,19 +252,22 @@ sendCommand path snippet = do
       p <- eitherToExcept (eitherDecodeStrict' (encodeUtf8 . T.pack $ snippet) :: Either String Value)
       return $ object ["params" .= p]
 
+    callServer serverHost event = callWithCookieJar (doCall' serverHost event) $> Right ()
+
     doCall' serverHost event cookieJar' = do
       manager' <- newManager $ mkManagerSettings allowSelfSigned Nothing
       let opts = defaults & cookies .~ (Just cookieJar')
                           & manager .~ (Right manager')
       postWith opts (mkServerAddr serverHost) event
 
+
 wreqErrorHandler :: HttpException -> IO (Either String ())
 wreqErrorHandler (HttpExceptionRequest _ (StatusCodeException s msg))
   | s ^. responseStatus . statusCode == 400 = genError msg
   | otherwise = s ^. responseStatus . statusMessage . to genError
   where
-    genError = return . Left . T.unpack . decodeUtf8
-wreqErrorHandler s = return . Left . show $ s
+    genError = return . Left . ("Error: " <>) . T.unpack . decodeUtf8
+wreqErrorHandler e = return . Left . show $ e
 
 -- | Wrap up a HTTP Client call to use a file-based cookie jar
 -- should work for HTTP.Client and Wreq (TODO - move nstack-cli fully to wreq)

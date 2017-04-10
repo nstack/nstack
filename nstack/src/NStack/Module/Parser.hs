@@ -18,6 +18,7 @@ import qualified Text.Megaparsec.Text as P    -- from: megaparsec
 import Text.Megaparsec (spaceChar, alphaNumChar, char, parse, parseErrorPretty, many, parseMaybe, (<|>), anyChar, skipMany, eof, string)    -- from: megaparsec
 import qualified Text.Megaparsec.Lexer as L    -- from: megaparsec
 
+import NStack.Auth (UserName(..))
 import NStack.Module.Types
 import NStack.Prelude.Monad (maybeToExcept, eitherToExcept)
 
@@ -39,7 +40,7 @@ inlineParser p = eitherToExcept . first parseErrorPretty . parse (spaces *> p <*
 parseModuleName :: MonadError String m => Text -> m ModuleName
 parseModuleName n = (do
   (ident, v1, v2, v3, r) <- splitModName n
-  parseModuleName' ident v1 v2 v3 r) `catchError` fmtError
+  parseModuleName' Nothing ident v1 v2 v3 r) `catchError` fmtError
   where fmtError err = throwError $
           "Could not parse module name " <> T.unpack n <> ".\n"
           <> err
@@ -97,18 +98,17 @@ dslModuleName = T.pack <$> (spaceConsumer *> (symbol "module") *> pRawModuleName
 -- | Parse and return the module name from a DSL
 getDslName :: MonadError String m => Text -> m ModuleName
 getDslName src = (maybeToExcept "Can't find DSL ModuleName" . parseMaybe dslModuleName $ src) >>= parseModuleName
-    
 
 -- | Parse a module name as a single identifier
 -- TODO - this needs improvement
-parseModuleName' :: (Monad m) => Text -> Integer -> Integer -> Integer -> Release -> m ModuleName
-parseModuleName' ident v1 v2 v3 r = do
+parseModuleName' :: (Monad m) => Maybe UserName -> Text -> Integer -> Integer -> Integer -> Release -> m ModuleName
+parseModuleName' mUser ident v1 v2 v3 r = do
   modNameF <- case T.splitOn "/" ident of
     [] -> error "moduleName': empty identifier (shouldn't happen)"
-    [modName] -> ModuleName nStackRegistry nStackAuthor <$> mkModName modName
+    [modName] -> ModuleName nStackRegistry defaultAuthor <$> mkModName modName
     [regOrAuthor, modName] -> if isAuthor regOrAuthor
       then ModuleName nStackRegistry (Author regOrAuthor) <$> mkModName modName
-      else ModuleName <$> mkReg regOrAuthor <*> pure nStackAuthor <*> mkModName modName
+      else ModuleName <$> mkReg regOrAuthor <*> pure defaultAuthor <*> mkModName modName
     [reg, author, modName] -> ModuleName <$> mkReg reg <*> pure (Author author) <*> mkModName modName
     _ -> fail'
   return . modNameF $ Version v1 v2 v3 r
@@ -120,6 +120,6 @@ parseModuleName' ident v1 v2 v3 r = do
       mkReg x = let reg = T.splitOn "." x in
         if length reg > 1 then return (NSUri reg) else fail "Invalid registry length"
       fail' = fail "Invalid module name, must be capitalised and separated with '.'"
-
+      defaultAuthor = maybe nStackAuthor (Author . _username) mUser
 
 

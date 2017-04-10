@@ -37,18 +37,21 @@
         <context ref="def:float"/>
         <context ref="def:string"/>
         <context id="keywords" style-ref="keyword">
-          <keyword>module</keyword>    
+          <keyword>module</keyword>
+          <keyword>import</keyword>
+          <keyword>as</keyword>
           <keyword>def</keyword>
+          <keyword>func</keyword>
           <keyword>filter</keyword>
           <keyword>concat</keyword>
         </context>
 
         <context id="types" style-ref="type">
-          <keyword>true</keyword>
-          <keyword>false</keyword>
-<!--
-          <keyword>double</keyword>
--->
+          <keyword>Text</keyword>
+          <keyword>Bool</keyword>
+          <keyword>Double</keyword>
+          <keyword>Integer</keyword>
+          <keyword>Byte</keyword>
         </context>
       </include>
     </context>
