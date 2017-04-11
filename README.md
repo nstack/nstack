@@ -50,13 +50,12 @@ NStack is comprised of a CLI which runs on your machine, and a virtual machine w
 
 ### CLI Installation
 
-Our CLI is available for Linux, Mac, and Windows and the latest pre-compiled versions can be downloaded on our [releases page](https://github.com/nstack/nstack/releases). the CLI is distributed as a self-contained compressed executable for Linux, Windows, and macOS.
-
-Download `nstack-cli-{linux64,win64,macOS}` for your platform, uncompress, and run `nstack` from the Terminal/Command Prompt
+The NStack CLI is available as self-contained executable for Linux, Windows, and macOS - binaries can be downloaded on our [releases page](https://github.com/nstack/nstack/releases).
+Simply download `nstack-cli-{linux64,win64,macOS}` for your platform, uncompress, and run `nstack` from the Terminal/Command Prompt.
 
 #### Linux
 
-We also provide RPM and DEB packages on the [releases page](https://github.com/nstack/nstack/releases) that will work for most common distros. 
+We also provide RPM and DEB packages on the [releases page](https://github.com/nstack/nstack/releases) that will work with most common distros. 
 
 <!--
 We also have `yum` and `apt` repositories for Redhat and Debian- derived OSs that are updated on each release.
@@ -99,11 +98,11 @@ apt-get install -f
 
 #### Compiling from source
 
-NStack is built using [Haskell](https://wwww.haskell.org), and to compile the CLI you will need the [Stack](https://www.haskellstack.org/
-) build tool install. Once this is done, just run the following commands from the checked-out project source directory
+NStack is built using [Haskell](https://wwww.haskell.org), to compile the CLI manually you will need the [Stack](https://www.haskellstack.org/) build tool. 
+Once this is installed, run the following commands from the git project root,
 
 ```bash
-# setup only needed on first compile
+# stack setup only needed on first compile
 stack setup
 stack build nstack-cli
 # install to user's local executable directory
