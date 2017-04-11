@@ -12,6 +12,7 @@ Firstly, it provides a way to turn disparate data-sources -- such as databases, 
 Secondly, it provides a way to publish local code as *functions* on your cloud provider. 
 These streams can be composed with these functions using NStack's scripting language, and NStack automates all underlying infrastructure so you can focus on data-science instead of operations.
 
+Finally, it provides end-to-end software life-cycle management for the data science process, intcluding sharing, reproducability, versioning, and isolation - akin to a _Docker_-for-data-analytics.
 
 ### Example
 
@@ -140,6 +141,15 @@ sudo dnf install nstack-server
 ```
 -->
 
+## Examples
+
+See https://github.com/nstack/nstack-examples for a range of examples, that you can clone and use immeditaetly, including,
+
+* [demos](https://github.com/nstack/nstack-examples/tree/master/demos) - Basic examples that demonstrate creating methods and composing them together into workflows
+* [nstack](https://github.com/nstack/nstack-examples/tree/master/nstack) - A selection of NStack utility modules, including methods for uploading to S3 and processing images
+* [iris](https://github.com/nstack/nstack-examples/tree/master/iris) - A Python-based classifier using `scikit-leaarn` that showcases building more complex modules with system dependencies and in-built data-sets
+* [movies](https://github.com/nstack/nstack-examples/tree/master/movies) - A complex worfklow composed from multiple individual services that processes movies data from the IMDB database -- demonstrating composition, filtering, service configuration, and partial workflow reuse
+
 ## What do people use NStack for?
 
 ### Productionising models
@@ -154,10 +164,6 @@ Transform disparate and disconnected data-sources -- such as 3rd-party APIs, leg
 - **Fast** Really fast throughout by using the latest developments in the Linux kernel
 - **Serverless** Modules are deployed as serverless, containerised, versioned, fully reproducible microservices 
 - **Composable** Compose infrastructure in a statically typed workflow language to automate operations
-
-## Examples
-
-See https://github.com/nstack/nstack-examples
 
 ## Concepts
 
