@@ -4,9 +4,12 @@
 
 ![Introduction](https://cdn.rawgit.com/nstack/nstack/c67fd1a9/images/readme-flowchart-intro.svg)
 
-NStack is a compute platform. It is ideal for data analytics because it makes integrating data, productionising code, and connecting it to that data really simple.
+NStack is a compute platform that is ideal for data analytics because it makes integrating data, productionising code, and connecting it all together really simple.
 <!-- Think of it like Bash-like, type-safe, piping for containerised microservices that live on your cloud. -->
-Firstly, it provides a way to turn disparate data-sources -- such as databases, 3rd-party APIs, or HTTP endpoints -- into streams of typed records. Secondly, it provides a way to publish local code as *functions* on your cloud provider. 
+
+Firstly, it provides a way to turn disparate data-sources -- such as databases, 3rd-party APIs, or HTTP endpoints -- into streams of typed records. 
+
+Secondly, it provides a way to publish local code as *functions* on your cloud provider. 
 These streams can be composed with these functions using NStack's scripting language, and NStack automates all underlying infrastructure so you can focus on data-science instead of operations.
 
 
@@ -43,6 +46,9 @@ Workflow started as process 3.
 
 See the [website](https://nstack.com) for more information, or check out the [full documentation](https://docs.nstack.com).
 
+### 2-minute Screencast
+
+[![asciicast](https://asciinema.org/a/112733.png)](https://asciinema.org/a/112733)
 
 ## Getting Started
 
