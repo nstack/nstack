@@ -46,7 +46,7 @@ Workflow started as process 3.
 
 See the [website](https://nstack.com) for more information, or check out the [full documentation](https://docs.nstack.com).
 
-### 2-minute Screencast
+### Intro Screencast
 
 [![asciicast](https://asciinema.org/a/112733.png)](https://asciinema.org/a/112733)
 
