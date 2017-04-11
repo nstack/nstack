@@ -12,7 +12,7 @@ Firstly, it provides a way to turn disparate data-sources -- such as databases, 
 Secondly, it provides a way to publish local code as *functions* on your cloud provider. 
 These streams can be composed with these functions using NStack's scripting language, and NStack automates all underlying infrastructure so you can focus on data-science instead of operations.
 
-Finally, it provides end-to-end software life-cycle management for the data science process, intcluding sharing, reproducability, versioning, and isolation - akin to a _Docker_-for-data-analytics.
+Finally, it provides end-to-end software life-cycle management for the data science process, intcluding sharing and reuse, reproducability, versioning, and isolation.
 
 ### Example
 
@@ -26,7 +26,7 @@ module Demo:0.1.0 {
   import Acme.Classifiers:0.3.0 as C
 
   // our analytics workflow
-  def workflow = Sources.Postgresql<(Int, Int, Text, CustomerRecord)> 
+  def workflow = Sources.Postgresql<(Int, Text)> 
                  | T.transform { strength = 5 }
                  | C.classify { model = "RandomForest" }
                  | Sinks.S3blob<Text>
