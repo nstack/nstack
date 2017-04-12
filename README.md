@@ -4,21 +4,20 @@
 
 ![Introduction](https://cdn.rawgit.com/nstack/nstack/c67fd1a9/images/readme-flowchart-intro.svg)
 
-NStack is a compute platform that is ideal for data analytics because it makes integrating data, productionising code, and connecting it all together really simple.
+NStack is a compute platform that is ideal for data analytics because it makes integrating data, publishing code, and connecting it all together really simple.
 <!-- Think of it like Bash-like, type-safe, piping for containerised microservices that live on your cloud. -->
 
-Firstly, it provides a way to turn disparate data-sources -- such as databases, 3rd-party APIs, or HTTP endpoints -- into streams of typed records. 
+1. You can turn disparate data-sources -- such as databases, 3rd-party APIs, or HTTP endpoints -- into streams of typed records. 
 
-Secondly, it provides a way to publish local code as *functions* on your cloud provider. 
-These streams can be composed with these functions using NStack's scripting language, and NStack automates all underlying infrastructure so you can focus on data-science instead of operations.
+2. You can publish local code as functions on your cloud provider. Streams can be composed and connected with these functions using NStack's scripting language, and NStack automates all underlying infrastructure so you can focus on data-science instead of operations.
 
-Finally, it provides end-to-end software life-cycle management for the data science process, including sharing and reuse, reproducibility, versioning, and runtime isolation.
+3. NStack provides end-to-end software life-cycle management for the data science process, including sharing and reuse, reproducibility, versioning, and runtime isolation.
 
 ### Example
 
 ![Example](https://cdn.rawgit.com/nstack/nstack/c67fd1a9/images/readme-flowchart-example.svg)
 
-We can express this within the NStack scripting language locally as follows, just think of it as Bash for containerised microservices,
+We can express this within the NStack scripting language locally as follows (just think of it as Bash for microservices).
 
 ```fsharp
 module Demo:0.1.0 {
@@ -41,7 +40,6 @@ Building Demo:0.1.0
 > nstack start Demo:0.1.0.workflow
 Workflow started as process 3.
 ```
-
 
 <!-- NStack is platform-agnostic, which means it can run anywhere. -->
 
@@ -131,9 +129,13 @@ stack install nstack-cli
 
 NStack offers a free-of-charge PaaS (Platform as a Service) for demo use, which means you can try NStack without installing the server. Note that the PaaS is intended as a sandbox and the environment is wiped daily at 0600 UTC.
 
-To create a demo account, please go to https://nstack.com and fill out the demo web form. You'll shortly receive an email with instructions to point your install of the `nstack` tookit to our demo server.
+You can register an account and immediately start using NStack using the following command:
 
-#### Host your own server
+``nstack register <username> <email>``
+
+This will send you an email with your credentials and instructions on getting started.
+
+#### Host your own NStack server
 
 To install your own NStack server, we provide a self-contained appliance VM:
 - an AMI for AWS EC2 (`ami-53a47245`)
