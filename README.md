@@ -15,7 +15,7 @@ NStack is a compute platform that is ideal for data analytics because it makes i
 
 ### Example
 
-![Example](https://cdn.rawgit.com/nstack/nstack/c67fd1a9/images/readme-flowchart-example.svg)
+![Example](https://cdn.rawgit.com/nstack/nstack/7ca03fc0/images/readme-flowchart-example.svg)
 
 We can express this within the NStack scripting language locally as follows (just think of it as Bash for microservices).
 
