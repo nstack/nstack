@@ -154,7 +154,7 @@ sudo dnf install nstack-server
 
 ## Examples
 
-See https://github.com/nstack/nstack-examples for a range of examples, that you can clone and use immeditaetly, including,
+See https://github.com/nstack/nstack-examples for a range of examples, which you can clone and use immediately, including
 
 * [demos](https://github.com/nstack/nstack-examples/tree/master/demos) - Basic examples that demonstrate creating methods and composing them together into workflows
 * [nstack](https://github.com/nstack/nstack-examples/tree/master/nstack) - A selection of NStack utility modules, including methods for uploading to S3 and processing images
