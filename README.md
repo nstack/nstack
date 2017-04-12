@@ -12,7 +12,7 @@ Firstly, it provides a way to turn disparate data-sources -- such as databases, 
 Secondly, it provides a way to publish local code as *functions* on your cloud provider. 
 These streams can be composed with these functions using NStack's scripting language, and NStack automates all underlying infrastructure so you can focus on data-science instead of operations.
 
-Finally, it provides end-to-end software life-cycle management for the data science process, intcluding sharing and reuse, reproducability, versioning, and isolation.
+Finally, it provides end-to-end software life-cycle management for the data science process, including sharing and reuse, reproducibility, versioning, and runtime isolation.
 
 ### Example
 
@@ -26,7 +26,7 @@ module Demo:0.1.0 {
   import Acme.Classifiers:0.3.0 as C
 
   // our analytics workflow
-  def workflow = Sources.Postgresql<(Int, Text)> 
+  def workflow = Sources.Postgresql<(Text, Int)> 
                  | T.transform { strength = 5 }
                  | C.classify { model = "RandomForest" }
                  | Sinks.S3blob<Text>
@@ -49,7 +49,7 @@ See the [website](https://nstack.com) for more information, or check out the [fu
 
 ### Intro Screencast
 
-[![asciicast](https://asciinema.org/a/112733.png)](https://asciinema.org/a/112733)
+<a href="https://asciinema.org/a/112733" target="_blank"><img src="https://asciinema.org/a/112733.png" width="600"/></a>
 
 ## Getting Started
 
@@ -60,9 +60,18 @@ NStack is comprised of a CLI which runs on your machine, and a virtual machine w
 The NStack CLI is available as self-contained executable for Linux, Windows, and macOS - binaries can be downloaded on our [releases page](https://github.com/nstack/nstack/releases).
 Simply download `nstack-cli-{linux64,win64,macOS}` for your platform, uncompress, and run `nstack` from the Terminal/Command Prompt.
 
+#### macOS
+
+In addition to standalone download on the [releases page](https://github.com/nstack/nstack/releases), we have a [homebrew](https://brew.sh/) package that can easily be installed as follows,
+
+```bash
+$ brew tap nstack/nstack
+$ brew cask install nstack-cli
+```
+
 #### Linux
 
-We also provide RPM and DEB packages on the [releases page](https://github.com/nstack/nstack/releases) that will work with most common distros. 
+We also provide RPM and DEB packages on the [releases page](https://github.com/nstack/nstack/releases) that will work with most common distros and can be installed via your system package manager.
 
 <!--
 We also have `yum` and `apt` repositories for Redhat and Debian- derived OSs that are updated on each release.
