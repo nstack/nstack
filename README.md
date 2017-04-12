@@ -13,43 +13,14 @@ NStack is a compute platform that is ideal for data analytics because it makes i
 
 3. NStack provides end-to-end software life-cycle management for the data science process, including sharing and reuse, reproducibility, versioning, and runtime isolation.
 
-### Example
-
-![Example](https://cdn.rawgit.com/nstack/nstack/7ca03fc0/images/readme-flowchart-example.svg)
-
-We can express this within the NStack scripting language locally as follows (just think of it as Bash for microservices).
-
-```fsharp
-module Demo:0.1.0 {
-  import NStack.Transformers:0.1.4 as T
-  import Acme.Classifiers:0.3.0 as C
-
-  // our analytics workflow
-  def workflow = Sources.Postgresql<(Text, Int)> 
-                 | T.transform { strength = 5 }
-                 | C.classify { model = "RandomForest" }
-                 | Sinks.S3blob<Text>
-}
-```
-
-We can then build, deploy, and start this workflow on an NStack Server from the NStack CLI on Linux, macOS, or Windows.
-
-```bash
-> nstack build
-Building Demo:0.1.0
-> nstack start Demo:0.1.0.workflow
-Workflow started as process 3.
-```
-
-<!-- NStack is platform-agnostic, which means it can run anywhere. -->
+## Getting Started
 
 See the [website](https://nstack.com) for more information, or check out the [full documentation](https://docs.nstack.com).
 
 ### Intro Screencast
 
-<a href="https://asciinema.org/a/112733" target="_blank"><img src="https://asciinema.org/a/112733.png" width="600"/></a>
+<a href="http://docs.nstack.com/en/latest/quick_start/index.html" target="_blank"><img src="https://asciinema.org/a/112733.png" width="600"/></a>
 
-## Getting Started
 
 NStack is comprised of a CLI which runs on your machine, and a virtual machine which runs on the cloud.
 
@@ -151,8 +122,36 @@ sudo wget -O /etc/yum.repos.d/nstack.repo http://distrepos.nstack.com/redhat/nst
 sudo dnf install nstack-server
 ```
 -->
-
 ## Examples
+
+### Basic Example
+
+![Example](https://cdn.rawgit.com/nstack/nstack/7ca03fc0/images/readme-flowchart-example.svg)
+
+We can express this within the NStack scripting language locally as follows (just think of it as Bash for microservices).
+
+```fsharp
+module Demo:0.1.0 {
+  import NStack.Transformers:0.1.4 as T
+  import Acme.Classifiers:0.3.0 as C
+
+  // our analytics workflow
+  def workflow = Sources.Postgresql<(Text, Int)> 
+                 | T.transform { strength = 5 }
+                 | C.classify { model = "RandomForest" }
+                 | Sinks.S3blob<Text>
+}
+```
+
+We can then build, deploy, and start this workflow on an NStack Server from the NStack CLI on Linux, macOS, or Windows.
+
+```bash
+> nstack build
+Building Demo:0.1.0
+> nstack start Demo:0.1.0.workflow
+Workflow started as process 3.
+```
+### More Examples
 
 See https://github.com/nstack/nstack-examples for a range of examples, which you can clone and use immediately, including
 
