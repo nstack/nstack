@@ -12,7 +12,7 @@ Firstly, it provides a way to turn disparate data-sources -- such as databases, 
 Secondly, it provides a way to publish local code as *functions* on your cloud provider. 
 These streams can be composed with these functions using NStack's scripting language, and NStack automates all underlying infrastructure so you can focus on data-science instead of operations.
 
-Finally, it provides end-to-end software life-cycle management for the data science process, including sharing and reuse, reproducability, versioning, and runtime isolation.
+Finally, it provides end-to-end software life-cycle management for the data science process, including sharing and reuse, reproducibility, versioning, and runtime isolation.
 
 ### Example
 
