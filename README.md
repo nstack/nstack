@@ -60,9 +60,18 @@ NStack is comprised of a CLI which runs on your machine, and a virtual machine w
 The NStack CLI is available as self-contained executable for Linux, Windows, and macOS - binaries can be downloaded on our [releases page](https://github.com/nstack/nstack/releases).
 Simply download `nstack-cli-{linux64,win64,macOS}` for your platform, uncompress, and run `nstack` from the Terminal/Command Prompt.
 
+#### macOS
+
+In addition to standalone download on the [releases page](https://github.com/nstack/nstack/releases), we have a [homebrew](https://brew.sh/) package that can easily be installed as follows,
+
+```bash
+$ brew tap nstack/nstack
+$ brew cask install nstack-cli
+```
+
 #### Linux
 
-We also provide RPM and DEB packages on the [releases page](https://github.com/nstack/nstack/releases) that will work with most common distros. 
+We also provide RPM and DEB packages on the [releases page](https://github.com/nstack/nstack/releases) that will work with most common distros and can be installed via your system package manager.
 
 <!--
 We also have `yum` and `apt` repositories for Redhat and Debian- derived OSs that are updated on each release.
