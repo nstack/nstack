@@ -158,7 +158,7 @@ See https://github.com/nstack/nstack-examples for a range of examples, which you
 * [demos](https://github.com/nstack/nstack-examples/tree/master/demos) - Basic examples that demonstrate creating methods and composing them together into workflows
 * [nstack](https://github.com/nstack/nstack-examples/tree/master/nstack) - A selection of NStack utility modules, including methods for uploading to S3 and processing images
 * [iris](https://github.com/nstack/nstack-examples/tree/master/iris) - A Python-based classifier using `scikit-leaarn` that showcases building more complex modules with system dependencies and in-built data-sets
-* [movies](https://github.com/nstack/nstack-examples/tree/master/movies) - A complex worfklow composed from multiple individual services that processes movies data from the IMDB database -- demonstrating composition, filtering, service configuration, and partial workflow reuse
+* [movies](https://github.com/nstack/nstack-examples/tree/master/movies) - A complex workflow composed from multiple individual services that processes movies data from the IMDB database, demonstrating composition, filtering, service configuration, and partial workflow reuse
 
 ## What do people use NStack for?
 
