@@ -167,7 +167,7 @@ See https://github.com/nstack/nstack-examples for a range of examples, which you
 
 The NStack CLI is open-source and licensed under the [BSD3 license](https://opensource.org/licenses/BSD-3-Clause). 
 
-The NStack Server is provided free-of-charge for personal, hobbyist, non-commercial, and evaluation use. Unfortunately it is currently closed-source, however we intend to open it up over time.
+The NStack Server is provided free-of-charge for personal, hobbyist, non-commercial, and evaluation use. It is currently closed-source, however we'd like to open more of it up over time.
 
 ### Contributing
 
