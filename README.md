@@ -160,6 +160,21 @@ See https://github.com/nstack/nstack-examples for a range of examples, which you
 * [iris](https://github.com/nstack/nstack-examples/tree/master/iris) - A Python-based classifier using `scikit-leaarn` that showcases building more complex modules with system dependencies and in-built data-sets
 * [movies](https://github.com/nstack/nstack-examples/tree/master/movies) - A complex workflow composed from multiple individual services that processes movies data from the IMDB database, demonstrating composition, filtering, service configuration, and partial workflow reuse
 
+
+## License and Contributing
+
+### License
+
+The NStack CLI is open-source and licensed under the [BSD3 license](https://opensource.org/licenses/BSD-3-Clause). 
+
+The NStack Server is provided free-of-charge for personal, hobbyist, non-commercial, and evaluation use. Unfortunately it is currently closed-source, however we intend to open it up over time.
+
+### Contributing
+
+This repo is currently a mirror of our internal work, as development happens fairly rapidly. However we welcome and encourage both Issues and PRs (unfortunately PRs will require a CLA - we're working on adding one as soon as possible).
+
+We're also looking into removing our mirror and working directly on this public repo if possible.
+
 ## What do people use NStack for?
 
 ### Productionising models
