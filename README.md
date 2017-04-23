@@ -171,7 +171,8 @@ The NStack Server is provided free-of-charge for personal, hobbyist, non-commerc
 
 ### Contributing
 
-This repo is currently a mirror of our internal work, as development happens fairly rapidly. However we welcome and encourage both Issues and PRs (unfortunately PRs will require a CLA - we're working on adding one as soon as possible).
+This repo is currently a mirror of our internal work, as development happens fairly rapidly. 
+However we welcome and encourage both Issues and PRs (PRs will require a CLA - as described in CONTRIBUTING.md).
 
 We're also looking into removing our mirror and working directly on this public repo if possible.
 
