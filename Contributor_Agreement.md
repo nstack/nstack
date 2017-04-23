@@ -36,4 +36,4 @@ English law governs this Agreement, excluding any applicable conflict of laws ru
 
 **Agreed and accepted on my behalf and on behalf of my organization**
 
-Our contributor agreement is based on the [mongoDB contributor agreement] (https://www.mongodb.com/legal/contributor-agreement).
+Our contributor agreement is based on the [mongoDB contributor agreement](https://www.mongodb.com/legal/contributor-agreement).
