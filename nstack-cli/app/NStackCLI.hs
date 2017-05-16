@@ -1,34 +1,34 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-
 module Main where
 
-import Control.Exception (catch)
+import Control.Exception (catch, displayException, fromException)
 import Control.Lens
-import Control.Monad (forM_)
+import Control.Monad (forM_, forever, void)
 import Control.Monad.Classes (ask)  -- from: monad-classes
 import Control.Monad.Trans (liftIO)
 import Control.Monad.Except (runExceptT, throwError) -- mtl
-import Control.Monad.Extra (ifM) -- mtl
+import Control.Monad.Extra (ifM, (||^)) -- extra
 import Control.Monad.Reader (runReaderT) -- mtl
+import Control.Concurrent.Async (withAsync, waitCatch, waitEitherCatch)
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict) -- from: bytestring
 import Data.Maybe (fromMaybe)
 import Data.Serialize (Serialize, encode, decode)
 import Data.List (isSuffixOf)
-import Data.Text (pack, unpack, Text, splitOn, replace, intercalate)
+import Data.Text (pack, unpack, Text)
 import qualified Data.Text.IO as TIO
 import Options.Applicative      -- optparse-applicative
-import System.Console.Haskeline (runInputT, defaultSettings, getExternalPrint)
+import qualified System.Console.Haskeline as HL
 import System.Info (os)
 import System.Exit (exitFailure)
+import System.IO (hPutStrLn, stderr, hIsTerminalDevice, stdin, stdout)
+import System.IO.Error (isEOFError)
 import qualified Turtle as R        -- turtle
 import Turtle((%), (<>))                  -- turtle
 
-import Network.HTTP.Client
+import Network.HTTP.Client hiding (host)
 import Network.HTTP.Client.TLS (mkManagerSettings)
 import Network.HTTP.Types (ok200)
+import qualified Network.WebSockets as WS
 
 import NStack.CLI.Auth (signRequest, allowSelfSigned)
 import NStack.CLI.Parser (cmds)
@@ -37,9 +37,8 @@ import NStack.CLI.Commands
 import qualified NStack.CLI.Commands as CLI
 import NStack.Common.Environment (httpApiPort)
 import NStack.Comms.Types
-import NStack.Module.ConfigFile (configFile, workflowFile, projectFile, getProjectFile, _projectModules, _cfgName, getConfigFile)
-import NStack.Module.Parser (getDslName)
-import NStack.Prelude.FilePath (fromFP)
+import NStack.Module.ConfigFile (configFile, workflowFile, projectFile, getProjectFile, _projectModules)
+import NStack.Module.Types (ModuleName, FnName)
 import NStack.Prelude.Text (pprT, prettyLinesOr, joinLines, showT)
 import NStack.Settings
 import NStack.Utils.Debug (versionMsg)
@@ -53,7 +52,7 @@ main :: IO ()
 main = do
   cmd <- customExecParser (prefs showHelpOnError) opts'
   manager <- newManager $ mkManagerSettings allowSelfSigned Nothing
-  server <- serverPath
+  server <- runSettingsT serverPath
   let transport = Transport $ callWithHttp manager server
   maybe printVersion (runClient transport . run) cmd
   where
@@ -65,20 +64,23 @@ main = do
 catLogs :: [LogsLine] -> Text
 catLogs = joinLines . fmap _logLine
 
--- A couple of partial functions here (init, replace), but results in a nice error for the user
--- | Add an import line when passing in a fully qualified workflow name
-addImport :: DSLSource -> DSLSource
-addImport (DSLSource m) = DSLSource . withImport m . intercalate "." . init $ splitOn "." m
-  where importLine t = "import " <> t <> " as M" <> "\n"
-        withImport a b = importLine b <> replace b "M" a
+-- | Given a module name and a function name from that module,
+-- create a notebook source that runs that function name.
+--
+-- See the 'notebook' parser in "NStack.Lang.DSL.Parser".
+formatNotebook :: ModuleName -> FnName -> DSLSource
+formatNotebook module_name fn_name = DSLSource $
+  "import " <> pprT module_name <> " as M" <> "\n" <>
+  "M." <> pprT fn_name
+
 
 run :: Command -> CCmd ()
 run (InitCommand initStack mBase gitRepo) = CLI.initCommand initStack mBase gitRepo
-run (StartCommand debug dsl) = callServer startCommand (addImport dsl, debug) CLI.showStartMessage
+run (StartCommand debug module_name fn_name) = callServer startCommand (formatNotebook module_name fn_name, debug) CLI.showStartMessage
 run (NotebookCommand debug mDsl) = do
-  liftIO . putStrLn $ "NStack Notebook - import modules, write a workflow, and press " <> endStream <> " when finished to start it: "
+  liftInput . HL.outputStrLn $ "NStack Notebook - import modules, write a workflow, and press " <> endStream <> " when finished to start it: "
   dsl <- maybe (liftIO $ DSLSource <$> TIO.getContents) pure mDsl
-  liftIO . putStrLn $ "Building and running NStack Workflow. Please wait. This may take some time."
+  liftInput . HL.outputStrLn $ "Building and running NStack Workflow. Please wait. This may take some time."
   callServer startCommand (dsl, debug) CLI.showStartMessage
   where endStream = if os == "mingw32" then "<Ctrl-Z>" else "<Ctrl-D>"
 run (StopCommand pId)         = callServer stopCommand pId CLI.showStopMessage
@@ -88,45 +90,77 @@ run (InfoCommand fAll)        = callServer infoCommand fAll CLI.printInfo
 run (ListCommand mType fAll)  = callServer listCommand (mType, fAll) CLI.printMethods
 run (ListModulesCommand fAll) = callServer listModulesCommand fAll (`prettyLinesOr` "No registered images")
 run (DeleteModuleCommand m)   = callServer deleteModuleCommand m (maybe "Module deleted" pprT)
-run (ListProcessesCommand)    = callServer listProcessesCommand () (`prettyLinesOr` "No running processes")
+run (ListProcessesCommand)    = callServer listProcessesCommand () CLI.printProcesses
 run (GarbageCollectCommand)   = callServer gcCommand () (`prettyLinesOr` "Nothing removed")
+run (ConnectCommand pId)      = connectStdInOut pId
 run (BuildCommand) =
   ifM (R.testfile projectFile) projectBuild
-    (ifM (R.testfile configFile) containerModule
-      (ifM (R.testfile workflowFile) workflowModule
-        (throwError (unpack $ R.format ("A valid nstack build file ("%R.fp%", "%R.fp%", "%R.fp%") was not found") projectFile configFile workflowFile))))
+    (ifM (R.testfile configFile ||^ R.testfile workflowFile) workflowModule
+      (throwError (unpack $ R.format ("A valid nstack build file ("%R.fp%", "%R.fp%", "%R.fp%") was not found") projectFile configFile workflowFile)))
   where
     projectBuild = do
-      liftIO . putStrLn $ "Building NStack Project. Please wait. This may take some time."
+      liftInput . HL.outputStrLn $ "Building NStack Project. Please wait. This may take some time."
       modules <- _projectModules <$> getProjectFile
       projectPath <- R.pwd
       -- change to each dir and run build
-      forM_ modules (\modPath -> R.cd modPath >> run BuildCommand >> R.cd projectPath)
-    containerModule = do
-      modName <- _cfgName <$> (R.pwd >>= getConfigFile)
-      liftIO . putStrLn $ "Building NStack Container module " <> unpack (CLI.localModName modName) <> ". Please wait. This may take some time."
-      package <- CLI.buildArtefacts
-      callServer buildCommand (BuildTarball $ toStrict package) showModuleBuild
+      forM_ modules $ \modPath -> do
+        liftInput . HL.outputStrLn . unpack $ R.format ("Building " % R.fp) modPath
+        R.cd modPath
+        buildCurrentDirectory
+        R.cd projectPath
     workflowModule = do
-      -- TODO - can we parse the workflow on client to surface syntatic errors quicker?
-      workflowSrc <- liftIO . TIO.readFile . fromFP $ workflowFile
-      modName <- getDslName workflowSrc
-      liftIO . putStrLn $ "Building NStack Workflow module " <> unpack (CLI.localModName modName) <> ". Please wait. This may take some time."
-      callServer buildWorkflowCommand (WorkflowSrc workflowSrc, modName) showWorkflowBuild
+      liftInput . HL.outputStrLn $ "Building an NStack module. Please wait. This may take some time."
+      buildCurrentDirectory
 run (LoginCommand a b c d)    = CLI.loginSettings a b c d
 run (RegisterCommand userName email mServer) = CLI.registerCommand userName email mServer
 run (SendCommand path' snippet) = CLI.sendCommand path' snippet
 
+-- | Build an nstack module (not a project) that resides in the current
+-- directory
+buildCurrentDirectory :: CCmd ()
+buildCurrentDirectory = do
+  -- TODO be smarter about which files we package
+  package <- CLI.buildArtefacts
+  callServer buildCommand (BuildTarball $ toStrict package) showModuleBuild
+
 -- | Run a command on the user client
 runClient :: Transport -> CCmd () -> IO ()
-runClient t c = runInputT defaultSettings (runExceptT (runReaderT (runSettingsT c) t) >>= either (\s -> liftIO (putStrLn s >> exitFailure)) return)
+runClient t c = do
+  -- Haskeline has two types of interactions: file-style and terminal-style.
+  -- This matters for us for two reasons:
+  -- 1. On Windows, they use different APIs and different character
+  --    encodings
+  -- 2. On UNIX, terminal-based Haskeline API writes to the tty and makes
+  --    it impossible to redirect the output to a file or pipe.
+  --
+  -- By default, the type of interaction is determined based on whether
+  -- stdin is connected to a terminal.
+  -- This is not terribly useful for us because we rarely ask for user input,
+  -- but we care a lot about the output.
+  -- Thus, we check whether stdout is connected to a terminal, and if so,
+  -- we force the file-style interaction.
+  -- Therefore, Haskeline will use the terminal-based interaction only when
+  -- both stdin and stdout are terminals.
+  -- Interestingly, testing on Windows showed that both file-style and
+  -- terminal-style interaction works on Windows terminals; however, if
+  -- I disable Haskeline altogether, I get the commitBuffer error
+  -- (https://github.com/nstack/nstack-server/issues/296#issuecomment-286798496)
+  -- Nevertheless, I leave this logic until we have a better understanding
+  -- of what is going on. -- RC
+  is_stdout_tty <- hIsTerminalDevice stdout
+  let
+    behavior :: HL.Behavior
+    behavior =
+      if is_stdout_tty
+        then HL.defaultBehavior
+        else HL.useFileHandle stdin
+  HL.runInputTBehavior behavior HL.defaultSettings (runExceptT (runReaderT (runSettingsT c) t) >>= either (\s -> liftIO (putStrLn s >> exitFailure)) return)
 
 callServer :: ApiCall a b -> a -> (b -> Text) -> CCmd ()
 callServer fn arg formatter = do
   (Transport t) <- ask
   r <- t fn arg
-  printer <- (. addTrailingNewline) <$> liftInput getExternalPrint
-  liftIO . printer . unpack $ formatResult formatter r
+  liftInput . HL.outputStr . addTrailingNewline . unpack $ formatResult formatter r
   where
     -- Currently, some messages are not \n-terminated (e.g.  showStartMessage),
     -- and some are (e.g. megaparsec errors).
@@ -140,15 +174,20 @@ callServer fn arg formatter = do
 formatResult :: (a -> Text) -> Result a -> Text
 formatResult f (Result      a) = f a
 formatResult _ (ClientError e) = "There was an error communicating with the NStack server:\n\nError: " <> e
-formatResult _ (ServerError e) = "An error was returned from the NStack Server:\n\nError: " <> e
+formatResult _ (ServerError e) = "An error was returned from the NStack Server:\nError: " <> e
 
-serverPath :: IO String
+serverHost :: (Monad m, MonadSettings m) => m String
+serverHost = do
+  s <-  (^. serverConn) <$> settings
+  let (HostName domain) = fromMaybe (HostName "localhost") ((^. serverHostname) =<< s)
+  return $ unpack domain
+
+serverPath :: (Monad m, MonadSettings m) => m String
 serverPath = do
-  s <-  (^. serverConn) <$> runSettingsT settings
-  let (HostName domain) = ((^. serverHostname) =<< s) `withDefault` HostName "localhost"
-  let port' = ((^. serverPort) =<< s) `withDefault` httpApiPort
-  return $ "https://" <> unpack domain <> ":" <> show port' <> "/"
-    where withDefault = flip fromMaybe
+  s <-  (^. serverConn) <$> settings
+  domain <- serverHost
+  let port' = fromMaybe httpApiPort ((^. serverPort) =<< s)
+  return $ "https://" <> domain <> ":" <> show port' <> "/"
 
 callWithHttp :: CCmdEff m => Manager -> String -> ApiCall a b -> a -> m (Result b)
 callWithHttp manager hostname (ApiCall name) args = do
@@ -179,3 +218,39 @@ doCall manager path' body auth = (do
 
         addBody :: Request -> Request
         addBody r = r { requestBody = RequestBodyBS body }
+
+connectStdInOut :: ProcessId -> CCmd ()
+connectStdInOut (ProcessId pid) = do
+  host <- serverHost
+  liftIO $ WS.runClient
+    host
+    8080
+    ("/process/" ++ unpack pid) $ \conn -> do
+
+    Right firstMessage <- decode <$> WS.receiveData conn
+    case firstMessage :: Either String String of
+      Left e -> do
+        hPutStrLn stderr e
+        exitFailure
+      Right msg -> do
+        hPutStrLn stderr msg
+        runStdInOut conn
+
+runStdInOut :: WS.Connection -> IO ()
+runStdInOut conn =
+  withAsync (forever $ WS.receiveData conn >>= TIO.putStrLn)   $ \asy_out ->
+  withAsync (forever $ TIO.getLine >>= WS.sendBinaryData conn) $ \asy_in  -> do
+    r <- waitEitherCatch asy_in asy_out
+    case r of
+      Left (Left e) | Just e' <- fromException e, isEOFError e' -> do
+        -- EOF on stdin
+        -- Wait for remaining data from the server.
+        -- This does NOT guarantee that we will get all responses to
+        -- our requests. The communication is asynchronous.
+        WS.sendClose conn (""::Text)
+        void $ waitCatch asy_out
+      _ -> case either id id r of
+        Right () ->
+          hPutStrLn stderr $ "runStdInOut: impossible happened (loop ended)"
+        Left e -> do
+          hPutStrLn stderr $ displayException e

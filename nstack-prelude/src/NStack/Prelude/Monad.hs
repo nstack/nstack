@@ -5,13 +5,17 @@ module NStack.Prelude.Monad (
 , maybeToExcept
 , maybeToRight
 , orError
+, orException
 , try'
 , (>>->)
+, withReaderT
 ) where
 
 import Control.Applicative (liftA2)
 import Control.Monad.Except
+import Control.Monad.Reader (ReaderT, runReaderT)
 import Control.Exception
+import Control.Monad.IO.Class (liftIO)
 import Data.Bifunctor (first)
 
 eitherToExcept :: MonadError e m => Either e a -> m a
@@ -27,6 +31,10 @@ maybeToRight l a = case a of Nothing -> Left l
 -- | synonym of maybeToExcept that reads better when infix
 orError :: MonadError e m => Maybe a -> e -> m a
 orError = flip maybeToExcept
+
+-- | Like 'orError', but throw an exception
+orException :: (MonadIO m, Exception e) => Maybe a -> e -> m a
+orException mb exn = maybe (liftIO $ throwIO exn) return mb
 
 castError :: MonadError e m => Either a b -> (a -> e) -> m b
 castError e f = either (throwError . f) return $ e
@@ -45,3 +53,6 @@ try' a = (liftIO
 (>>->) :: Monad m => (a -> m b) -> (a -> m r) -> a -> m r
 (>>->) = liftA2 (>>)
 infixl 1 >>->
+
+withReaderT :: r -> ReaderT r m a -> m a
+withReaderT = flip runReaderT

@@ -1,0 +1,6 @@
+module {{ name }}
+
+import Demo.NumChars:0.0.1-SNAPSHOT as D
+
+// A sample workflow
+def w = Sources.http<Text> { http_path = "/demo" } | D.numChars | Sinks.log<Integer>

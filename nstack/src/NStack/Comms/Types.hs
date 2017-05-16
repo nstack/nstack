@@ -1,39 +1,69 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE UndecidableInstances #-}
 
 module NStack.Comms.Types where
 
 import Data.ByteString (ByteString)  -- from: bytestring
 import Data.Coerce (coerce)
 import qualified Data.Map as Map
-import Data.SafeCopy (deriveSafeCopy, base)
-import Data.Serialize (Serialize(..), Putter, Get)
-import Data.Serialize.Put (putEitherOf)
-import Data.Serialize.Get (getEitherOf)
+import Data.Monoid ((<>))
+import Data.SafeCopy (deriveSafeCopy, base, contain, SafeCopy(..), safePut, safeGet)
+import Data.Serialize (Serialize(..), putTwoOf, getTwoOf, getEitherOf, putEitherOf)
 import Data.String (IsString)
 import Data.Text (Text)
+import qualified Data.Text as T
+import Data.Thyme (UTCTime, formatTime, parseTime)
+import Data.Thyme.Time (fromThyme, toThyme)
 import Data.Typeable (Typeable)
 import Data.UUID (UUID)
 import DBus (makeRepresentable)
 import GHC.Generics (Generic)
-import Text.PrettyPrint.Mainland (Pretty)
+import System.Locale (defaultTimeLocale)
+import Text.PrettyPrint.Mainland (Pretty(..), text, spaces, align, stack)
 
-import NStack.Module.Types (DebugOpt, ModuleName, MethodURI, Stack)
+import NStack.Module.Types (DebugOpt, ModuleName, QFnName, Stack)
 import NStack.Module.Types (Image(..))
 import NStack.Prelude.Text (putText, getText)
 
--- general type aliases used from client/server comms
+processTimeFormat :: String
+processTimeFormat = "%F %T"
+
+-- general newtypes used from client/server comms
+
+newtype StartTime = StartTime UTCTime
+  deriving (Eq, Ord)
+
+instance Show StartTime where
+  show (StartTime t) = show t
+
+instance Pretty StartTime where
+  ppr = text . show
+
+instance Serialize StartTime where
+  put (StartTime t) = put $ formatTime defaultTimeLocale processTimeFormat t
+  get = do
+    s <- get
+    maybe (fail "Could not parse date string") return $ timeM s
+      where timeM = fmap StartTime . parseTime defaultTimeLocale processTimeFormat
+
+instance SafeCopy StartTime where
+  putCopy (StartTime t) = contain . safePut $ fromThyme t
+  getCopy = contain $ StartTime . toThyme <$> safeGet
+
+newtype ProcessId = ProcessId Text
+  deriving (Eq, Pretty, Ord)
 
 newtype GitRepo = GitRepo { _gitRepo :: Bool }
   deriving (Eq)
-newtype ProcessId = ProcessId { _processId :: Text }
-  deriving (Eq, Pretty, Ord)
+
+data ProcessInfo = ProcessInfo
+  { _processId :: ProcessId
+  , _timestamp :: StartTime
+  , _command :: Text
+  } deriving (Eq, Ord, Show)
+
+instance Pretty ProcessInfo where
+  ppr (ProcessInfo (ProcessId p) t c) =  ppr p <> spaces 5 <> ppr t <> spaces 2 <> align (stack $ ppr <$> T.lines c)
+
 newtype ContainerId = ContainerId { _containerId :: Text } -- systemd dbus object path
 newtype BuildTarball = BuildTarball { _buildTarball :: ByteString }
 newtype WorkflowSrc = WorkflowSrc { _workflowSrc :: Text }
@@ -46,8 +76,8 @@ newtype DSLSource = DSLSource { _src :: Text }
 
 -- | Simplified nstack-server info for sending to the CLI
 data ServerInfo = ServerInfo {
-  _processes  :: [ProcessId],
-  _methods    :: Map.Map MethodURI TypeSignature,
+  _processes  :: [ProcessInfo],
+  _methods    :: Map.Map QFnName TypeSignature,
   _modules    :: Map.Map ModuleName ModuleInfo }
   deriving (Generic)
 
@@ -66,26 +96,30 @@ data MethodType = MethodType | SourceType | SinkType | WorkflowType
 instance Serialize MethodType
 
 instance Show ProcessId where
-  show = coerce (show :: Text -> String)
+  show = coerce $ show @Text
 
 instance Show ContainerId where
-  show = coerce (show :: Text -> String)
+  show = coerce $ show @Text
 
 instance Show GitRepo where
-  show = coerce (show :: Bool -> String)
+  show = coerce $ show @Bool
 
 instance Show WorkflowSrc where
-  show = coerce (show :: Text -> String)
+  show = coerce $ show @Text
 
 instance Show TypeSignature where
-  show = coerce (show :: Text -> String)
+  show = coerce $ show @Text
 
 instance Show DSLSource where
-  show = coerce (show :: Text -> String)
+  show = coerce $ show @Text
 
 instance Serialize ProcessId where
   put = coerce putText
   get = coerce getText
+
+instance Serialize ProcessInfo where
+  put (ProcessInfo pId t c) = putTwoOf put (putTwoOf put putText) (pId, (t, c))
+  get = (\(p, (t, c)) -> ProcessInfo p t c) <$> getTwoOf get (getTwoOf get getText)
 
 instance Serialize WorkflowSrc where
   put = coerce putText
@@ -104,8 +138,8 @@ instance Serialize DSLSource where
   get = coerce getText
 
 instance Serialize BuildTarball where
-  put = coerce (put :: Putter ByteString)
-  get = coerce (get :: Get ByteString)
+  put = coerce $ put @ByteString
+  get = coerce $ get @ByteString
 
 instance Serialize ServerInfo
 instance Serialize ModuleInfo
@@ -114,6 +148,7 @@ makeRepresentable ''ProcessId
 makeRepresentable ''ContainerId
 
 deriveSafeCopy 0 'base ''ProcessId
+deriveSafeCopy 0 'base ''ProcessInfo
 deriveSafeCopy 0 'base ''ContainerId
 
 -- NStack Toolkit/Server Communication
@@ -130,7 +165,7 @@ instance (Serialize a) => Serialize (ServerReturn a) where
 data ApiCall a b where
   ApiCall :: (Serialize a, Serialize b) => Text -> ApiCall a b
 
-startCommand :: ApiCall (DSLSource, DebugOpt) (DSLSource, ProcessId)
+startCommand :: ApiCall (DSLSource, DebugOpt) ProcessInfo
 startCommand = ApiCall "StartCommand"
 
 stopCommand :: ApiCall ProcessId ProcessId
@@ -145,7 +180,7 @@ serverLogsCommand = ApiCall "ServerLogsCommand"
 infoCommand :: ApiCall Bool ServerInfo
 infoCommand = ApiCall "InfoCommand"
 
-listCommand :: ApiCall (Maybe MethodType, Bool) [(MethodURI, TypeSignature)]
+listCommand :: ApiCall (Maybe MethodType, Bool) [(QFnName, TypeSignature)]
 listCommand = ApiCall "ListCommand"
 
 listModulesCommand :: ApiCall Bool [ModuleName]
@@ -154,7 +189,7 @@ listModulesCommand = ApiCall "ListModulesCommand"
 deleteModuleCommand :: ApiCall ModuleName (Maybe UUID)
 deleteModuleCommand = ApiCall "DeleteModuleCommand"
 
-listProcessesCommand :: ApiCall () [ProcessId]
+listProcessesCommand :: ApiCall () [ProcessInfo]
 listProcessesCommand = ApiCall "ListProcessesCommand"
 
 gcCommand :: ApiCall () [UUID]

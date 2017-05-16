@@ -1,4 +1,3 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module NStack.Prelude.Text where
 
 import Control.Monad (mzero)

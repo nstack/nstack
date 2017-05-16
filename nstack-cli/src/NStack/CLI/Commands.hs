@@ -1,7 +1,3 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RecordWildCards #-}
 module NStack.CLI.Commands (
   CCmd,
   initCommand,
@@ -14,8 +10,8 @@ module NStack.CLI.Commands (
   localModName,
   printInfo,
   printMethods,
+  printProcesses,
   showModuleBuild,
-  showWorkflowBuild,
   registerCommand,
   sendCommand,
   callWithCookieJar
@@ -59,11 +55,11 @@ import NStack.Auth
 import NStack.CLI.Auth (allowSelfSigned)
 import NStack.CLI.Types
 import NStack.CLI.Templates (createFromTemplate)
-import NStack.Comms.Types (GitRepo(..), ProcessId(..), ModuleInfo(..), ServerInfo(..), MethodType, TypeSignature(..), DSLSource(..))
-import NStack.Module.Types (Stack, BaseImage(..), DebugOpt(..), ModuleName(..), MethodURI(..), showShortModuleName)
+import NStack.Comms.Types (GitRepo(..), ProcessId(..), ProcessInfo(..), ModuleInfo(..), ServerInfo(..), MethodType, TypeSignature(..), DSLSource(..))
+import NStack.Module.Types (Stack, BaseImage(..), DebugOpt(..), ModuleName(..), FnName, QFnName, Qualified(..), showShortModuleName)
 import NStack.Module.Parser (parseModuleName)
 import qualified NStack.Utils.Archive as Archive
-import NStack.Module.ConfigFile (discover, configFile)
+import NStack.Module.ConfigFile (configFile)
 import NStack.Prelude.Applicative ((<&>))
 import NStack.Prelude.FilePath (fpToText, fromFP, toFP)
 import NStack.Prelude.Shell (runCmd_)
@@ -79,9 +75,10 @@ type Snippet = String
 data Command
   = InitCommand InitStack (Maybe BaseImage) GitRepo
   | NotebookCommand DebugOpt (Maybe DSLSource)
-  | StartCommand DebugOpt DSLSource
+  | StartCommand DebugOpt ModuleName FnName
   | StopCommand ProcessId
   | LogsCommand ProcessId
+  | ConnectCommand ProcessId
   | ServerLogsCommand
   | InfoCommand Bool
   | ListCommand (Maybe MethodType) Bool
@@ -166,7 +163,7 @@ initGitRepo = liftIO $ do
 -- | Returns the artefacts needed to build a module
 buildArtefacts :: CCmdEff m => m ByteString
 buildArtefacts = do
-  srcDir <- liftIO getCurrentDirectory >>= (discover . toFP)
+  srcDir <- toFP <$> liftIO getCurrentDirectory
   liftIO $ Archive.pack srcDir
 
 printInfo :: ServerInfo -> Text
@@ -192,21 +189,28 @@ printInfo (ServerInfo ps meths ms) = prettyT' $
             where baseMods = filter (isNothing . _miParent . snd) mods
                   f mod'@(modName, _) = (mod', filter ((== Just modName) . _miParent . snd) mods)
 
-printMethods :: [(MethodURI, TypeSignature)] -> Text
+printMethods :: [(QFnName, TypeSignature)] -> Text
 printMethods = prettyT' . M.stack . prettyPrintMethods
 
-prettyPrintMethods :: [(MethodURI, TypeSignature)] -> [M.Doc]
+prettyPrintMethods :: [(QFnName, TypeSignature)] -> [M.Doc]
 prettyPrintMethods =  moduleMethodBlocks . fmap (fmap printMethod) . fmap Map.toList . nest
   where printMethod (uri, (TypeSignature ts)) = M.ppr uri <> " : " <> M.ppr ts
         moduleMethodBlocks = fmap (uncurry (block . unpack . pprT)) . Map.toList
-        nest = foldr (\((MethodURI c d), a) m -> Map.unionWith (<>) m (newMap c d a)) Map.empty
+        nest = foldr (\((Qualified c d), a) m -> Map.unionWith (<>) m (newMap c d a)) Map.empty
         newMap c d a = Map.singleton c (Map.singleton d a)
+
+printProcesses :: [ProcessInfo] -> Text
+printProcesses [] = "No running processes"
+printProcesses xs = prettyT' $ M.text "pid" <> M.spaces 4 <> M.text "time" <> M.spaces 21 <> M.text "command" </>
+                    M.text (replicate 40 '=') </>
+                    M.stack (map M.ppr xs)
+
 
 block :: String -> [M.Doc] -> M.Doc
 block label stack = M.text label </> M.indent 4 (M.stack stack) </> M.empty
 
-showStartMessage :: (DSLSource, ProcessId) -> Text
-showStartMessage ((DSLSource _), (ProcessId pId)) = "Successfully started as process " <> pId
+showStartMessage :: ProcessInfo -> Text
+showStartMessage (ProcessInfo (ProcessId pId) _ _) = "Successfully started as process " <> pId
 
 showStopMessage :: ProcessId -> Text
 showStopMessage (ProcessId pId) = "Successfully stopped process " <> pId
@@ -218,9 +222,6 @@ localModName = last . T.splitOn "nstack/" . T.pack . showShortModuleName
 
 showModuleBuild :: ModuleName -> Text
 showModuleBuild mName = "Module " <> pprT mName <> " built successfully. Use `nstack list functions` to see all available functions."
-
-showWorkflowBuild :: ModuleName -> Text
-showWorkflowBuild mName = "Workflow module " <> pprT mName <> " built successfully. Use `nstack list all` to see all available functions."
 
 loginSettings :: HostName -> Int -> UserId -> SecretKey -> CCmd ()
 loginSettings hostname port username pw = do modifySettings $ \s -> s & serverConn ?~ (ServerDetails (Just hostname)

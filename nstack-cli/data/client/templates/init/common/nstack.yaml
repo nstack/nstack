@@ -1,14 +1,8 @@
-# Module name (must be capitalised)
-name: {{ name }}
-
 # The language stack to use
 stack: {{ stack }}
 
 # Parent Image
 parent: {{ parent }}
-
-api: |
-  numChars : Text -> Integer
 
 # (Optional) System-level packages needed
 packages: []

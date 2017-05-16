@@ -1,5 +1,5 @@
 name: nstack-prelude
-version: 0.0.3.4
+version: 0.0.3.6
 cabal-version: >=1.22
 build-type: Simple
 license: BSD3
@@ -18,6 +18,7 @@ library
   exposed-modules:
     NStack.Prelude.Applicative
     NStack.Prelude.Debug
+    NStack.Prelude.Exception
     NStack.Prelude.FilePath
     NStack.Prelude.Parsec
     NStack.Prelude.Monad
@@ -26,34 +27,103 @@ library
     NStack.Prelude.Text
     NStack.Prelude.URI
   build-depends:
-    base >= 4.7 && < 5,
-    bytestring >=0.10.6.0,
-    containers >=0.5.6.2,
-    cereal >=0.5.3.0,
+    base,
+    bytestring,
+    containers,
+    cereal,
     exceptions,
-    extra >=1.4.10,
-    http-types >= 0.9.1,
-    mainland-pretty >= 0.4.1.4,
-    mtl >=2.2.1,
-    parsec >= 3.1.11,
+    extra,
+    http-types,
+    lifted-base,
+    mainland-pretty,
+    mtl,
+    monad-control,
+    parsec,
     pipes,
     pipes-safe,
     resourcet,
-    system-filepath >= 0.4.13.4,
-    text >=1.2.2.1,
+    system-filepath,
+    text,
     transformers-base,
     turtle >=1.2.8
-  default-extensions: OverloadedStrings FlexibleContexts
   default-language:    Haskell2010
+  default-extensions:
+    ConstraintKinds
+    DataKinds
+    DeriveDataTypeable
+    DeriveFoldable
+    DeriveFunctor
+    DeriveGeneric
+    DeriveTraversable
+    FlexibleContexts
+    FlexibleInstances
+    FunctionalDependencies
+    GADTs
+    GeneralizedNewtypeDeriving
+    KindSignatures
+    LambdaCase
+    MagicHash
+    MultiParamTypeClasses
+    MultiWayIf
+    NamedFieldPuns
+    OverloadedStrings
+    PatternSynonyms
+    PolyKinds
+    RankNTypes
+    RecordWildCards
+    ScopedTypeVariables
+    StandaloneDeriving
+    TupleSections
+    TypeApplications
+    TypeFamilies
+    TypeFamilyDependencies
+    TypeOperators
+    TypeSynonymInstances
+    UndecidableInstances
+    ViewPatterns
 
 test-suite nstack-prelude-test
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
   main-is:             Spec.hs
-  build-depends:       base >= 4.7 && < 5,
+  build-depends:       base,
                        nstack-prelude -any
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
+  default-extensions:
+    ConstraintKinds
+    DataKinds
+    DeriveDataTypeable
+    DeriveFoldable
+    DeriveFunctor
+    DeriveGeneric
+    DeriveTraversable
+    FlexibleContexts
+    FlexibleInstances
+    FunctionalDependencies
+    GADTs
+    GeneralizedNewtypeDeriving
+    KindSignatures
+    LambdaCase
+    MagicHash
+    MultiParamTypeClasses
+    MultiWayIf
+    NamedFieldPuns
+    OverloadedStrings
+    PatternSynonyms
+    PolyKinds
+    RankNTypes
+    RecordWildCards
+    ScopedTypeVariables
+    StandaloneDeriving
+    TupleSections
+    TypeApplications
+    TypeFamilies
+    TypeFamilyDependencies
+    TypeOperators
+    TypeSynonymInstances
+    UndecidableInstances
+    ViewPatterns
 
 source-repository head
   type:     git

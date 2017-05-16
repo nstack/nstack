@@ -1,4 +1,3 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module NStack.Settings.Internal.Lens (AsYAML(..), Yaml(..), yaml) where
 import Control.Lens                 -- from: lens
 import Data.Aeson                   -- from: aeson

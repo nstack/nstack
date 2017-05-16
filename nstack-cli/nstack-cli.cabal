@@ -1,5 +1,5 @@
 name: nstack-cli
-version: 0.0.3.4
+version: 0.0.3.6
 cabal-version: >=1.22
 build-type: Simple
 license: BSD3
@@ -17,7 +17,7 @@ data-files:
     data/client/templates/init/python/service.py
     data/client/templates/init/python/requirements.txt
     data/client/templates/init/python/setup.py
-    data/client/templates/init/workflow/workflow.nml
+    data/client/templates/init/workflow/module.nml
 
 library
   hs-source-dirs:      src
@@ -29,70 +29,138 @@ library
         NStack.CLI.Templates
         NStack.CLI.Types
   build-depends:
-        base >=4.8 && <4.10,
-        aeson >= 1.0.2.1,
-        wreq >= 0.5.0.0,
-        bytestring >=0.10.6.0,
-        connection >=0.2.7,
-        containers >=0.5.7.1,
-        cryptonite >=0.21,
-        directory >=1.2.2.0,
-        extra >=1.4.10,
-        filepath >=1.4.1.0,
-        file-embed >= 0.0.1.0,
-        foldl >=1.2.1,
-        ghc >= 8.0.1,
-        haskeline >= 0.7,
-        http-client >= 0.5.6.1,
-        http-client-tls >= 0.3.4,
-        http-types >= 0.9.1,
-        optparse-applicative >=0.12.1.0,
-        lens >= 4.15,        
-        mainland-pretty >=0.4.1.4,
-        megaparsec >= 5.2.0,
-        monad-classes >= 0.2,
-        mtl >=2.2.1,
-        mustache >=1.0.2,
-        parsec >=3.1.11,
-        process >=1.2.3.0,
-        system-filepath >=0.4.13.4,
-        text >=1.2.2.1,
-        tree-view >=0.4,
-        turtle >=1.2.8,
+        base,
+        aeson,
+        wreq,
+        bytestring,
+        connection,
+        containers,
+        cryptonite,
+        directory,
+        extra,
+        filepath,
+        file-embed,
+        foldl,
+        ghc,
+        haskeline,
+        http-client,
+        http-client-tls,
+        http-types,
+        optparse-applicative,
+        lens,
+        mainland-pretty,
+        megaparsec,
+        monad-classes,
+        mtl,
+        mustache,
+        parsec,
+        process,
+        system-filepath,
+        text,
+        tree-view,
+        turtle,
         nstack -any,
         nstack-prelude -any
   other-modules:
         Paths_nstack_cli
   default-language:    Haskell2010
-  default-extensions: OverloadedStrings FlexibleContexts
+  default-extensions:
+    ConstraintKinds
+    DataKinds
+    DeriveDataTypeable
+    DeriveFoldable
+    DeriveFunctor
+    DeriveGeneric
+    DeriveTraversable
+    FlexibleContexts
+    FlexibleInstances
+    FunctionalDependencies
+    GADTs
+    GeneralizedNewtypeDeriving
+    KindSignatures
+    LambdaCase
+    MagicHash
+    MultiParamTypeClasses
+    MultiWayIf
+    NamedFieldPuns
+    OverloadedStrings
+    PatternSynonyms
+    PolyKinds
+    RankNTypes
+    RecordWildCards
+    ScopedTypeVariables
+    StandaloneDeriving
+    TupleSections
+    TypeApplications
+    TypeFamilies
+    TypeFamilyDependencies
+    TypeOperators
+    TypeSynonymInstances
+    UndecidableInstances
+    ViewPatterns
 
 executable nstack
     main-is: NStackCLI.hs
     build-depends:
-        base >=4.8 && <4.10,
-        bytestring >=0.10.6.0,
-        cereal >=0.5.3.0,
-        connection >=0.2.7,
-        containers >=0.5.7.1,
-        either >= 4.4.1.1,
-        extra >=1.4.10,
-        haskeline >= 0.7,
-        http-client >= 0.5.6.1,
-        http-client-tls >= 0.3.4,
-        http-types >= 0.9.1,
-        lens >= 4.14,
-        mainland-pretty >=0.4.1.4,
-        memory >=0.14.1,
-        monad-classes >= 0.2,
-        mtl >=2.2.1,
-        optparse-applicative >=0.12.1.0,
-        text >=1.2.2.1,
-        turtle >=1.2.8,
+        async,
+        base,
+        bytestring,
+        cereal,
+        connection,
+        containers,
+        either,
+        extra,
+        haskeline,
+        http-client,
+        http-client-tls,
+        http-types,
+        lens,
+        mainland-pretty,
+        memory,
+        monad-classes,
+        mtl,
+        optparse-applicative,
+        text,
+        turtle,
+        websockets,
         nstack -any,
         nstack-prelude -any,
         nstack-cli -any
     default-language: Haskell2010
-    default-extensions: OverloadedStrings FlexibleContexts
+    default-extensions:
+      ConstraintKinds
+      DataKinds
+      DeriveDataTypeable
+      DeriveFoldable
+      DeriveFunctor
+      DeriveGeneric
+      DeriveTraversable
+      FlexibleContexts
+      FlexibleInstances
+      FunctionalDependencies
+      GADTs
+      GeneralizedNewtypeDeriving
+      KindSignatures
+      LambdaCase
+      MagicHash
+      MultiParamTypeClasses
+      MultiWayIf
+      NamedFieldPuns
+      OverloadedStrings
+      PatternSynonyms
+      PolyKinds
+      RankNTypes
+      RecordWildCards
+      ScopedTypeVariables
+      StandaloneDeriving
+      TupleSections
+      TypeApplications
+      TypeFamilies
+      TypeFamilyDependencies
+      TypeOperators
+      TypeSynonymInstances
+      UndecidableInstances
+      ViewPatterns
     hs-source-dirs: app
     ghc-options: -Wall -fno-warn-type-defaults -threaded -rtsopts -with-rtsopts=-N -optc-Os -O2
 
@@ -104,6 +172,40 @@ test-suite nstack-cli-test
                      , nstack-cli
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
+  default-extensions:
+    ConstraintKinds
+    DataKinds
+    DeriveDataTypeable
+    DeriveFoldable
+    DeriveFunctor
+    DeriveGeneric
+    DeriveTraversable
+    FlexibleContexts
+    FlexibleInstances
+    FunctionalDependencies
+    GADTs
+    GeneralizedNewtypeDeriving
+    KindSignatures
+    LambdaCase
+    MagicHash
+    MultiParamTypeClasses
+    MultiWayIf
+    NamedFieldPuns
+    OverloadedStrings
+    PatternSynonyms
+    PolyKinds
+    RankNTypes
+    RecordWildCards
+    ScopedTypeVariables
+    StandaloneDeriving
+    TupleSections
+    TypeApplications
+    TypeFamilies
+    TypeFamilyDependencies
+    TypeOperators
+    TypeSynonymInstances
+    UndecidableInstances
+    ViewPatterns
 
 source-repository head
   type:     git

@@ -1,15 +1,7 @@
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeFamilies #-}
 
 module NStack.Module.Types where
-import Control.Lens (lens, Lens', iso, Iso')   -- from: lens
+import Control.Lens (Lens', iso, Iso')   -- from: lens
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Base16
@@ -22,8 +14,10 @@ import Data.Serialize.Put (putListOf)
 import Data.String (IsString)
 import Data.Text (Text)                        -- from: text
 import qualified Data.Text as T                -- from: text
+import Data.Aeson (ToJSON(..))
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Typeable (Typeable)
+import Data.Data (Data(..))
 import Data.UUID (UUID)
 import GHC.Generics (Generic)
 import Text.PrettyPrint.Mainland (Pretty, ppr, text, commasep)   -- from: mainland-pretty
@@ -31,9 +25,10 @@ import Text.Printf (printf)
 import qualified Turtle as R
 import Turtle ((%))
 
+import NStack.Auth (UserName(..), nstackUserName)
 import NStack.SafeCopyOrphans ()
 import NStack.UUIDOrphans ()
-import NStack.Prelude.Text (showT, putText, getText, pprT)
+import NStack.Prelude.Text (showT, putText, getText, pprS)
 
 
 data Stack = Python | NodeJS
@@ -52,7 +47,7 @@ stacks :: [Stack]
 stacks = [Python, NodeJS]
 
 newtype NSUri = NSUri { _nsUri :: [Text] }
-  deriving (Eq, Ord, Typeable)
+  deriving (Eq, Ord, Typeable, Data)
 
 instance Show NSUri where
   show = T.unpack . T.intercalate "." . _nsUri
@@ -63,11 +58,7 @@ instance Serialize NSUri where
 
 $(deriveSafeCopy 0 'base ''NSUri)
 
-newtype Author = Author { _author :: Text }
-  deriving (Eq, Ord)
-
-instance Show Author where
-  show = coerce (show :: Text -> String)
+newtype Author = Author Text
 
 instance Serialize Author where
   put = coerce putText
@@ -78,7 +69,7 @@ data Version_v1 = Version_v1 Integer Integer Integer Bool
 
 -- The order of constructors is significant for the Ord instance
 data Release = Snapshot | Release
-  deriving (Eq, Ord, Show, Generic)
+  deriving (Eq, Ord, Show, Generic, Typeable, Data)
 
 -- TODO add version helper funcs that support semver?
 data Version = Version {
@@ -86,7 +77,7 @@ data Version = Version {
   _minorVer :: Integer,
   _patchVer :: Integer,
   _release  :: Release
-} deriving (Eq, Ord, Generic)
+} deriving (Eq, Ord, Generic, Typeable, Data)
 
 instance Migrate Version_v1 where
   type MigrateFrom Version_v1 = Version_v0
@@ -106,13 +97,20 @@ instance Show Version where
 initVersion :: Version
 initVersion = Version 0 0 1 Snapshot
 
+data ModuleName_v0 = MN0 NSUri Author NSUri Version
+  deriving (Generic)
+
 -- | Name for a unique module that exists on the server
 data ModuleName = ModuleName {
   _mRegistry :: NSUri,
-  _mAuthor :: Author,
+  _mAuthor :: UserName,
   _mName :: NSUri,
   _mVersion :: Version
-} deriving (Show, Eq, Ord, Generic)
+} deriving (Show, Eq, Ord, Generic, Typeable, Data)
+
+-- | Used by IDLJSONWriter
+instance ToJSON ModuleName where
+  toJSON = toJSON . pprS
 
 instance Pretty ModuleName where
   ppr = text . showShortModuleName
@@ -126,12 +124,8 @@ ordByVersion m@(ModuleName _ _ _ v) m'@(ModuleName _ _ _ v') = if sameNSName m m
 nStackRegistry :: NSUri
 nStackRegistry = NSUri ["registry", "nstack", "com"]
 
--- TODO - unify with `username` in Auth
-nStackAuthor :: Author
-nStackAuthor = Author "nstack"
-
 mkNStackModuleName :: NSUri -> Version -> ModuleName
-mkNStackModuleName = ModuleName nStackRegistry nStackAuthor
+mkNStackModuleName = ModuleName nStackRegistry nstackUserName
 
 -- | display the module name, hiding registry and author if they are the default
 showShortModuleName :: ModuleName -> String
@@ -139,11 +133,12 @@ showShortModuleName ModuleName{..} = T.unpack $ reg <> aut <> showT _mName <> ":
   where
     reg = if _mRegistry == nStackRegistry then "" else showT _mRegistry <> "/"
     -- changing to always show author for now, rather than hiding if aut == nStackAuthor
-    aut = _author _mAuthor <> "/"
+    aut = _username _mAuthor <> "/"
 
 
 instance Serialize Release
 instance Serialize Version
+instance Serialize ModuleName_v0
 instance Serialize ModuleName
 
 $(deriveSafeCopy 0 'base ''Author)
@@ -151,31 +146,56 @@ $(deriveSafeCopy 0 'base ''Release)
 $(deriveSafeCopy 0 'base ''Version_v0)
 $(deriveSafeCopy 1 'extension ''Version_v1)
 $(deriveSafeCopy 2 'extension ''Version)
-$(deriveSafeCopy 0 'base ''ModuleName)
+$(deriveSafeCopy 0 'base ''ModuleName_v0)
+$(deriveSafeCopy 1 'extension ''ModuleName)
 
--- | A method-name stored within a module
-newtype MethodName = MethodName { _methodName :: Text }
-  deriving (Eq, Ord, Typeable, IsString, Pretty)
+instance Migrate ModuleName where
+  type MigrateFrom ModuleName = ModuleName_v0
+  migrate (MN0 n (Author t) n' v) = ModuleName n (UserName t) n' v
 
-instance Show MethodName where
-  show = coerce (show :: Text -> String)
+-- | The name of an NStack function
+newtype FnName = FnName Text
+  deriving (Eq, Ord, Typeable, IsString, Pretty, Generic, ToJSON)
 
-instance Serialize MethodName where
+instance Show FnName where
+  show = coerce T.unpack
+
+instance Serialize FnName where
   put = coerce putText
   get = coerce getText
 
--- | A fully-qualified methodname, including both the full ModuleName Path and the MethodName itself
--- We create this during parsing by mapping from the short qualified modulename to the full ModuleName
-data MethodURI = MethodURI { _modName :: ModuleName, _methName :: MethodName }
-  deriving (Eq, Ord, Typeable, Generic)
+-- | The name of an NStack function
+newtype TyName = TyName Text
+  deriving (Eq, Ord, Typeable, Data, IsString, Pretty, Generic, ToJSON)
 
-instance Show MethodURI where
-  show (MethodURI modName methName) = T.unpack $ pprT modName <> "." <> _methodName methName
+instance Show TyName where
+  show = coerce T.unpack
 
-instance Pretty MethodURI where
+instance Serialize TyName where
+  put = coerce putText
+  get = coerce getText
+
+-- | A fully-qualified function or type name
+data Qualified a = Qualified
+  { _modName :: ModuleName
+  , _unqualName :: a
+  }
+  deriving (Eq, Ord, Typeable, Generic, Data)
+
+-- | Used by IDLJSONWriter
+instance ToJSON a => ToJSON (Qualified a) where
+  toJSON (Qualified m n) = toJSON (m, n)
+
+type QFnName = Qualified FnName
+type QTyName = Qualified TyName
+
+instance Show a => Show (Qualified a) where
+  show (Qualified modName methName) = pprS modName <> "." <> show methName
+
+instance Show a => Pretty (Qualified a) where
   ppr = text . show
 
-instance Serialize MethodURI
+instance Serialize a => Serialize (Qualified a)
 
 
 
@@ -224,9 +244,6 @@ instance Serialize Image
 
 newtype BusName = BusName { _unBusName :: Text } deriving (Eq, Show)
 data DebugOpt = NoDebug | Debug deriving (Eq, Ord, Show, Generic)
-data ServiceOptions
- = ServiceOptions { _busName :: BusName, _debugOpt :: DebugOpt }
- deriving (Eq, Show)
 
 -- monoid instance for DebugOpt is OR
 instance Monoid DebugOpt where
@@ -236,25 +253,8 @@ instance Monoid DebugOpt where
 
 instance Serialize DebugOpt
 
-class HasServiceOptions a where
-  serviceOptions :: Lens' a ServiceOptions
-
 class HasDebugOpt a where
   debugOpt :: Lens' a DebugOpt
 
 unBusName :: Iso' BusName Text
 unBusName = iso _unBusName BusName
-
-busName :: Lens' ServiceOptions BusName
-busName = lens _busName $ \o n -> o { _busName = n }
-
-instance HasDebugOpt ServiceOptions  where
-  debugOpt = lens _debugOpt $ \o d -> o { _debugOpt = d }
-
--- | Given all mandatory options returns an
--- | ServiceOptions with default values set
--- | for the rest.
--- | Currently only busName is mandatory, and only
--- | optional is NoDebug
-defaultServiceOptions :: BusName -> ServiceOptions
-defaultServiceOptions bn = ServiceOptions bn mempty

@@ -1,6 +1,3 @@
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- | This module defines orphan instances needed to integrate pipes and
 -- resourcet.

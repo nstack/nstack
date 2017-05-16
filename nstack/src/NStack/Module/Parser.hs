@@ -1,6 +1,3 @@
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE TupleSections #-}
-
 module NStack.Module.Parser where
 
 import Data.Foldable (asum, for_)
@@ -18,7 +15,7 @@ import qualified Text.Megaparsec.Text as P    -- from: megaparsec
 import Text.Megaparsec (spaceChar, alphaNumChar, char, parse, parseErrorPretty, many, parseMaybe, (<|>), anyChar, skipMany, eof, string)    -- from: megaparsec
 import qualified Text.Megaparsec.Lexer as L    -- from: megaparsec
 
-import NStack.Auth (UserName(..))
+import NStack.Auth (UserName(..), nstackUserName)
 import NStack.Module.Types
 import NStack.Prelude.Monad (maybeToExcept, eitherToExcept)
 
@@ -107,9 +104,9 @@ parseModuleName' mUser ident v1 v2 v3 r = do
     [] -> error "moduleName': empty identifier (shouldn't happen)"
     [modName] -> ModuleName nStackRegistry defaultAuthor <$> mkModName modName
     [regOrAuthor, modName] -> if isAuthor regOrAuthor
-      then ModuleName nStackRegistry (Author regOrAuthor) <$> mkModName modName
+      then ModuleName nStackRegistry (UserName regOrAuthor) <$> mkModName modName
       else ModuleName <$> mkReg regOrAuthor <*> pure defaultAuthor <*> mkModName modName
-    [reg, author, modName] -> ModuleName <$> mkReg reg <*> pure (Author author) <*> mkModName modName
+    [reg, author, modName] -> ModuleName <$> mkReg reg <*> pure (UserName author) <*> mkModName modName
     _ -> fail'
   return . modNameF $ Version v1 v2 v3 r
     where
@@ -120,6 +117,6 @@ parseModuleName' mUser ident v1 v2 v3 r = do
       mkReg x = let reg = T.splitOn "." x in
         if length reg > 1 then return (NSUri reg) else fail "Invalid registry length"
       fail' = fail "Invalid module name, must be capitalised and separated with '.'"
-      defaultAuthor = maybe nStackAuthor (Author . _username) mUser
+      defaultAuthor = maybe nstackUserName id mUser
 
 

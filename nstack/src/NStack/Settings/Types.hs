@@ -1,7 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TupleSections #-}
 module NStack.Settings.Types where
 import Control.Applicative (empty, (<|>))
 import Control.Lens hiding ((.=))               -- from: lens

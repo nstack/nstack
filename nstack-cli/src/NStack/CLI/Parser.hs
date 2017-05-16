@@ -12,7 +12,7 @@ import NStack.Auth (hexUserId, textSecretKey, UserName(..), validEmail)
 import NStack.CLI.Commands (Command(..), InitStack(..))
 import NStack.Comms.Types
 import NStack.Module.Parser (pStack, inlineParser)
-import NStack.Module.Types (DebugOpt(..), BaseImage(..), ModuleName(..))
+import NStack.Module.Types (DebugOpt(..), BaseImage(..), ModuleName(..), FnName(..))
 import NStack.Module.Parser (parseModuleName)
 import NStack.Prelude.Monad (maybeToRight)
 
@@ -20,16 +20,16 @@ import Options.Applicative       -- optparse-applicative
 
 -- Combinators
 pModuleName :: Parser ModuleName
-pModuleName = argument pModuleName' (metavar "module" <> help "Module Name")
+pModuleName = argument pModuleName' (metavar "module" <> help "Module name")
   where
     pModuleName' :: ReadM ModuleName
     pModuleName' = eitherReader (runExcept . parseModuleName . pack)
 
+pFnName :: Parser FnName
+pFnName = (FnName . pack) <$> strArgument (metavar "function_name" <> help "Function name")
+
 pDSL :: Parser DSLSource
 pDSL = DSLSource . pack <$> argument str (metavar "code" <> help "DSL code. If omitted, will be read from standard input.")
-
-pWorkflowName :: Parser DSLSource
-pWorkflowName = DSLSource . pack <$> argument str (metavar "workflow" <> help "Fully qualified workflow name, e.g. Foo:1.2.3.bar")
 
 pProcessId :: Parser ProcessId
 pProcessId = ProcessId . pack <$> argument str (metavar "process" <> help "Process Id")
@@ -39,7 +39,7 @@ allSwitch = switch (long "all" <> short 'a' <> help "Show older versions of modu
 
 -- | Parser for Start command options
 startOpts :: Parser Command
-startOpts =  StartCommand <$> debugFlag <*> pWorkflowName
+startOpts =  StartCommand <$> debugFlag <*> pModuleName <*> pFnName
 
 -- | Parser for Notebook command options
 notebookOpts :: Parser Command
@@ -55,6 +55,9 @@ stopOpts =  StopCommand <$> pProcessId
 -- | Parser for the log command options
 logsOpts :: Parser Command
 logsOpts = LogsCommand <$> pProcessId
+
+connectOpts :: Parser Command
+connectOpts = ConnectCommand <$> pProcessId
 
 -- Parser for Init command options
 
@@ -118,6 +121,7 @@ cmds =  hsubparser ( command "info" (info (InfoCommand <$> allSwitch) (progDesc 
                 <>  command "stop" (info stopOpts (progDesc "Stop a process"))
                 <>  command "ps" (info (pure ListProcessesCommand) (progDesc "List all running processes"))
                 <>  command "logs" (info logsOpts (progDesc "Show the logs of a running process"))
+                <>  command "connect" (info connectOpts (progDesc "Connect stdin/stdout to a process"))
                 <>  command "server-logs" (info (pure ServerLogsCommand) (progDesc "Show the nstack server's logs"))
                 <>  command "gc" (info (pure GarbageCollectCommand) (progDesc "Garbage collect images"))
                 <>  command "set-server" (info loginOpts (progDesc "Set authentication config for remote server"))

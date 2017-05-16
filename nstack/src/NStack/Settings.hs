@@ -1,5 +1,3 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
 module NStack.Settings (SettingsT,
                         runSettingsT,
                         MonadSettings(..),

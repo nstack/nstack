@@ -1,9 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TemplateHaskell #-}
-
 module NStack.Auth where
 
 import Control.Applicative (empty)
@@ -26,6 +20,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import GHC.Generics (Generic)
+import Data.Data (Typeable, Data)
 import GHC.Prim (coerce)
 
 import NStack.Prelude.Applicative (afold)
@@ -34,9 +29,11 @@ import NStack.Prelude.Text (getText, putText)
 type Signature = Digest SHA256
 type Payload = ByteString
 
--- TODO - unify with author in NStack.Module.Types
 newtype UserName = UserName { _username :: Text }
-  deriving (Eq, Ord, Show, Generic, IsString)
+  deriving (Eq, Ord, Generic, IsString, Typeable, Data)
+
+instance Show UserName where
+  show = coerce (show :: Text -> String)
 
 nstackUserName :: UserName
 nstackUserName = UserName "nstack"
