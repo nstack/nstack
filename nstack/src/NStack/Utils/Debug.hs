@@ -4,12 +4,9 @@ module NStack.Utils.Debug (
 )
 where
 
-import Data.Text (unpack, pack)        -- from: text
 import Data.Version (showVersion)
 import Development.GitRev              -- from: gitrev
 import Paths_nstack (version)
-import Turtle((%))                     -- from: turtle
-import qualified Turtle as R           -- from: turtle
 
 -- | return the full version of the nstack library
 versionMsg :: String
@@ -24,7 +21,7 @@ versionMsg = concat $ [ "Version ", showVersion version
 
 -- | Unrecoverable error
 panic :: String -> a
-panic msg = error . unpack $ R.format (R.s%"\nPanic - "%R.s) (pack versionMsg) (pack msg)
+panic msg = error $ versionMsg ++ "\nPanic - " ++ msg
 
 panicList :: (Show b) => String -> [(String, b)] -> a
 panicList msg vars = panic (msg ++ "\n" ++ unlines vars')

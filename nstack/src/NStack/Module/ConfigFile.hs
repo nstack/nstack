@@ -6,17 +6,17 @@ import Control.Monad
 import Control.Monad.Except(MonadError)              -- mtl
 import Control.Monad.Trans(MonadIO, liftIO)          -- mtl
 import Data.Aeson.Types (typeMismatch)
-import Data.Bifunctor (first)
 import Data.Text(Text, unpack, pack)
 import qualified Data.Yaml as Y
 import Data.Yaml((.:), (.:?), (.!=))
+import Data.String (IsString)
 import Turtle ((</>))
 import qualified Turtle as R
 
 import NStack.Module.Types (ModuleName(..), Stack(..))
 import NStack.Module.Parser (parseModuleName, pStack, inlineParser)
 import NStack.Prelude.FilePath (fromFP, toFP)
-import NStack.Prelude.Monad (eitherToExcept)
+import NStack.Prelude.Exception (throwPermanentError)
 type API = Text
 type Package = Text
 type Command = Text
@@ -56,26 +56,20 @@ instance Y.FromJSON Stack where
 instance Y.ToJSON Stack where
   toJSON = Y.String . pack . show
 
-configFile :: R.FilePath
+configFile :: IsString s => s
 configFile = "nstack.yaml"
 
-workflowFile :: R.FilePath
+workflowFile :: IsString s => s
 workflowFile = "module.nml"
 
 -- | Return the config for the module
-getConfigFile :: (MonadIO m, MonadError String m) => R.FilePath -> m ConfigFile
-getConfigFile moduleDir = liftIO (Y.decodeFileEither $ fromFP (moduleDir </> configFile))
-                         >>= (eitherToExcept . first prettyPrintParseException)
-  where
-    prettyPrintParseException e =
-      case e of
-        -- Y.prettyPrintParseException adds 'Aeson exception: ' to the
-        -- error message, which is completely unhelpful
-        Y.AesonException s -> s
-        _ -> Y.prettyPrintParseException e
+getConfigFile :: (MonadIO m) => R.FilePath -> m ConfigFile
+getConfigFile moduleDir =
+  either (throwPermanentError . prettyPrintParseException) return =<<
+    liftIO (Y.decodeFileEither $ fromFP (moduleDir </> configFile))
 
 -- | Project File
-projectFile :: R.FilePath
+projectFile :: IsString s => s
 projectFile = "nstack-project.yaml"
 
 data ProjectFile = ProjectFile {
@@ -94,5 +88,14 @@ instance Y.FromJSON R.FilePath where
 
 -- | Return the project file in the current dir
 getProjectFile :: (MonadIO m, MonadError String m) => m ProjectFile
-getProjectFile = liftIO (Y.decodeFileEither $ fromFP projectFile)
-                         >>= (eitherToExcept . first Y.prettyPrintParseException)
+getProjectFile =
+  either (throwPermanentError . prettyPrintParseException) return =<<
+    liftIO (Y.decodeFileEither $ fromFP projectFile)
+
+prettyPrintParseException :: Y.ParseException -> String
+prettyPrintParseException e =
+  case e of
+    -- Y.prettyPrintParseException adds 'Aeson exception: ' to the
+    -- error message, which is completely unhelpful
+    Y.AesonException s -> s
+    _ -> Y.prettyPrintParseException e

@@ -1,4 +1,4 @@
-module NStack.Prelude.Applicative (tuple, (<&>), afold) where
+module NStack.Prelude.Applicative (tuple, (<&>), afold, guarded) where
 
 import Control.Applicative
 
@@ -14,3 +14,8 @@ infixl 1 <&>
 
 afold :: (Foldable f, Alternative g) => f a -> g a
 afold = foldr ((<|>) . pure) empty
+
+guarded :: Alternative f => (a -> Bool) -> a -> f a
+guarded p a = case p a of
+               True -> pure a
+               False -> empty

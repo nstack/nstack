@@ -1,5 +1,6 @@
 module Main where
 
+import Control.Concurrent (threadDelay)
 import Control.Exception (catch, displayException, fromException)
 import Control.Lens
 import Control.Monad (forM_, forever, void)
@@ -15,13 +16,17 @@ import Data.Maybe (fromMaybe)
 import Data.Serialize (Serialize, encode, decode)
 import Data.List (isSuffixOf)
 import Data.Text (pack, unpack, Text)
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as TIO
+import qualified Data.UUID as UUID
 import Options.Applicative      -- optparse-applicative
 import qualified System.Console.Haskeline as HL
 import System.Info (os)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr, hIsTerminalDevice, stdin, stdout)
 import System.IO.Error (isEOFError)
+import System.Random (randomIO)
 import qualified Turtle as R        -- turtle
 import Turtle((%), (<>))                  -- turtle
 
@@ -37,8 +42,9 @@ import NStack.CLI.Commands
 import qualified NStack.CLI.Commands as CLI
 import NStack.Common.Environment (httpApiPort)
 import NStack.Comms.Types
+import NStack.Comms.ApiHashValue (apiHashValue)
 import NStack.Module.ConfigFile (configFile, workflowFile, projectFile, getProjectFile, _projectModules)
-import NStack.Module.Types (ModuleName, FnName)
+import NStack.Module.Types (ModuleName, FnName, Qualified(..))
 import NStack.Prelude.Text (pprT, prettyLinesOr, joinLines, showT)
 import NStack.Settings
 import NStack.Utils.Debug (versionMsg)
@@ -89,7 +95,7 @@ run ServerLogsCommand         = callServer serverLogsCommand () catLogs
 run (InfoCommand fAll)        = callServer infoCommand fAll CLI.printInfo
 run (ListCommand mType fAll)  = callServer listCommand (mType, fAll) CLI.printMethods
 run (ListModulesCommand fAll) = callServer listModulesCommand fAll (`prettyLinesOr` "No registered images")
-run (DeleteModuleCommand m)   = callServer deleteModuleCommand m (maybe "Module deleted" pprT)
+run (DeleteModuleCommand m)   = callServer deleteModuleCommand m (const $ "Module deleted: " <> pprT m)
 run (ListProcessesCommand)    = callServer listProcessesCommand () CLI.printProcesses
 run (GarbageCollectCommand)   = callServer gcCommand () (`prettyLinesOr` "Nothing removed")
 run (ConnectCommand pId)      = connectStdInOut pId
@@ -114,6 +120,24 @@ run (BuildCommand) =
 run (LoginCommand a b c d)    = CLI.loginSettings a b c d
 run (RegisterCommand userName email mServer) = CLI.registerCommand userName email mServer
 run (SendCommand path' snippet) = CLI.sendCommand path' snippet
+run (TestCommand mod' fn snippet) = do
+  path' <- liftIO randomPath
+  (Transport t) <- ask
+  r <- t testCommand ((Qualified mod' fn), HttpPath path')
+  (ProcessInfo pId _ _) <- case r of
+              (ServerError e) -> throwError $ unpack e
+              (ClientError e)-> throwError $ unpack e
+              (Result v) -> return v
+  wait -- we have a few manual waits to account for the lack of enforced sequencing between the events we're dealing with
+  run (SendCommand (unpack path') snippet)
+  wait
+  run (StopCommand pId)
+  wait
+  run (LogsCommand pId)
+    where wait = liftIO $ threadDelay (500{-ms-} * 1000)
+
+randomPath :: IO Text
+randomPath = ("/" <>) . UUID.toText <$> randomIO
 
 -- | Build an nstack module (not a project) that resides in the current
 -- directory
@@ -205,16 +229,18 @@ doCall manager path' body auth = (do
   let status = responseStatus response
   if (status == ok200)
      then (return . either decodeError serverResult . decode . toStrict $ responseBody response)
-     else (return . ServerError $ showT status)) `catch` handleHttpErr
+     else (return . ServerError $ T.unlines [showT status, (T.decodeUtf8 . toStrict) (responseBody response)])
+  ) `catch` handleHttpErr
   where decodeError = ClientError . ("Cannot decode return value: " <>) . pack
-        serverResult = either ServerError Result . _serverReturn
+        serverResult = either (ServerError . pack . displayException) Result . _serverReturn
         -- 15 * 60 * 1000 * 1000 == 15 minutes in microseconds
         incTimeout r = r { responseTimeout = responseTimeoutMicro (15 * 60 * 1000 * 1000) }
 
         doCall' cookieJar' = do
           signedRequest <- signRequest auth . addBody =<< parseRequest path'
           (cookieRequest, _) <- insertCookiesIntoRequest signedRequest cookieJar' <$> R.date
-          httpLbs (incTimeout cookieRequest) manager
+          let versionedRequest = cookieRequest { requestHeaders = ("NSTACK_VERSION", apiHashValue) : requestHeaders cookieRequest }
+          httpLbs (incTimeout versionedRequest) manager
 
         addBody :: Request -> Request
         addBody r = r { requestBody = RequestBodyBS body }

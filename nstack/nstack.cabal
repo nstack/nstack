@@ -1,5 +1,5 @@
 name: nstack
-version: 0.0.4.1
+version: 0.0.6.3
 cabal-version: >=1.22
 build-type: Simple
 license: BSD3
@@ -18,22 +18,26 @@ source-repository head
 
 library
     exposed-modules:
-        NStack.Auth
-        NStack.Common.Environment
-        NStack.Comms.Types
-        NStack.Http
-        NStack.UUIDOrphans
-        NStack.Module.ConfigFile
-        NStack.Module.Parser
-        NStack.Module.Types
-        NStack.Utils.Archive
-        NStack.Utils.Debug
-        NStack.SafeCopyOrphans
-        NStack.Settings
-        NStack.Settings.Class
+          NStack.Auth
+          NStack.Common.Environment
+          NStack.Comms.Types
+          NStack.UUIDOrphans
+          NStack.Module.Parser
+          NStack.Module.Types
+          NStack.SafeCopyOrphans
+          NStack.Settings
+          NStack.Utils.Archive
+          NStack.Utils.Debug
+    if !impl(ghcjs)
+      exposed-modules:
+          NStack.Comms.ApiHash
+          NStack.Comms.ApiHashValue
+          NStack.Http
+          NStack.Module.ConfigFile
+          NStack.Settings.Class
+
     build-depends:
         base,
-        acid-state,
         aeson,
         async,
         base16-bytestring,
@@ -41,27 +45,23 @@ library
         binary,
         bytestring,
         cereal,
+        cereal-text,
         constraints,
         containers,
         cryptonite,
-        d-bus,
         directory,
         either,
         exceptions,
-        extra,
         filepath,
         foldl,
         gitrev,
         generic-deriving,
         ghc-prim,
-        http-types,
         lens,
         lens-action,
         lens-aeson,
-        logging-effect,
         mainland-pretty,
         memory,
-        -- managed,
         megaparsec,
         monad-classes,
         monad-control,
@@ -75,25 +75,33 @@ library
         safecopy,
         scientific,
         semigroups,
-        singletons,
         split,
+        srcloc,
         string-conv,
         stm,
         stm-chans,
-        stm-delay,
         system-filepath,
         tar,
         text,
+        template-haskell,
+        th-lift-instances,
+        th-reify-many,
         thyme,
         uuid,
+        uniplate,
         transformers,
         transformers-base,
         turtle,
         vector,
         vector-space,
-        wai,
         yaml,
         nstack-prelude -any
+    if !impl(ghcjs)
+      build-depends:
+        http-types,
+        singletons,
+        wai
+
     default-language: Haskell2010
     default-extensions:
       ConstraintKinds
@@ -130,11 +138,12 @@ library
       UndecidableInstances
       ViewPatterns
     hs-source-dirs: src
+
     other-modules:
-        Paths_nstack
-        NStack.Settings.Types
-        NStack.Settings.Internal.Lens
-        NStack.Settings.Internal.Orphans
+          Paths_nstack
+          NStack.Settings.Types
+          NStack.Settings.Internal.Lens
+
     ghc-options: -Wall -fno-warn-type-defaults -optc-Os -O2
 
 test-suite nstack-test

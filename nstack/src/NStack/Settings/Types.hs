@@ -11,7 +11,6 @@ import Data.Text (Text, toLower)                -- from: text
 import Data.UUID (UUID)                         -- from: uuid
 
 import NStack.Auth (SecretKey, UserId)
-import NStack.Settings.Internal.Orphans ()
 
 newtype InstallID = InstallID UUID deriving (Eq, Show, ToJSON, FromJSON)
 
@@ -93,6 +92,16 @@ authSettings f s = (\r -> s { _authSettings = r }) <$> f (_authSettings s)
 
 authServer :: Lens' Settings (Maybe HostName)
 authServer f s = (\r -> s { _authServer = r }) <$> f (_authServer s)
+
+authKey :: Lens' AuthSettings SecretKey
+authKey f = \case
+  NStackHMAC u k -> NStackHMAC u <$> f k
+  Trust k -> Trust <$> f k
+
+authLogin :: Prism' AuthSettings (UserId, SecretKey)
+authLogin = prism' (uncurry NStackHMAC) $ \case
+  NStackHMAC u k -> Just (u, k)
+  _ -> Nothing
 
 serverConn :: Lens' Settings (Maybe ServerDetails)
 serverConn f s = (\r -> s { _server = r }) <$> f (_server s)

@@ -38,6 +38,7 @@ import Data.Tree.View (showTree)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
+import Data.Coerce (coerce)
 import qualified Filesystem.Path.CurrentOS as FP -- system-filepath
 import Network.HTTP.Client hiding (responseStatus)
 import Network.HTTP.Client.TLS (mkManagerSettings)
@@ -55,8 +56,8 @@ import NStack.Auth
 import NStack.CLI.Auth (allowSelfSigned)
 import NStack.CLI.Types
 import NStack.CLI.Templates (createFromTemplate)
-import NStack.Comms.Types (GitRepo(..), ProcessId(..), ProcessInfo(..), ModuleInfo(..), ServerInfo(..), MethodType, TypeSignature(..), DSLSource(..))
-import NStack.Module.Types (Stack, BaseImage(..), DebugOpt(..), ModuleName(..), FnName, QFnName, Qualified(..), showShortModuleName)
+import NStack.Comms.Types (GitRepo(..), ProcessId(..), ProcessInfo(..), ModuleInfo(..), ServerInfo(..), EntityType, TypeSignature(..), DSLSource(..))
+import NStack.Module.Types (Stack, BaseImage(..), DebugOpt(..), ModuleName(..), FnName(..), Qualified(..), showShortModuleName)
 import NStack.Module.Parser (parseModuleName)
 import qualified NStack.Utils.Archive as Archive
 import NStack.Module.ConfigFile (configFile)
@@ -81,7 +82,7 @@ data Command
   | ConnectCommand ProcessId
   | ServerLogsCommand
   | InfoCommand Bool
-  | ListCommand (Maybe MethodType) Bool
+  | ListCommand (Maybe EntityType) Bool
   | ListModulesCommand Bool
   | DeleteModuleCommand ModuleName
   | ListProcessesCommand
@@ -89,6 +90,7 @@ data Command
   | BuildCommand
   | RegisterCommand UserName Email ServerAddr
   | SendCommand Path Snippet
+  | TestCommand ModuleName FnName Snippet
   | LoginCommand HostName Int UserId SecretKey
 
 data InitProject = InitProject Text (Maybe Stack) (Maybe ModuleName) -- Name, Stack, Parent Module
@@ -169,7 +171,7 @@ buildArtefacts = do
 printInfo :: ServerInfo -> Text
 printInfo (ServerInfo ps meths ms) = prettyT' $
       block "Running processes:" (map M.ppr ps) </>
-      block "Available functions:" (prettyPrintMethods $ Map.toList meths) </>
+      block "Available functions:" (prettyPrintMethods $ coerce . Map.toList $ meths) </>
       M.text "Container modules:" </> showModules ms
         where
 
@@ -189,12 +191,13 @@ printInfo (ServerInfo ps meths ms) = prettyT' $
             where baseMods = filter (isNothing . _miParent . snd) mods
                   f mod'@(modName, _) = (mod', filter ((== Just modName) . _miParent . snd) mods)
 
-printMethods :: [(QFnName, TypeSignature)] -> Text
+printMethods :: [(Qualified Text, TypeSignature)] -> Text
 printMethods = prettyT' . M.stack . prettyPrintMethods
 
-prettyPrintMethods :: [(QFnName, TypeSignature)] -> [M.Doc]
+prettyPrintMethods :: [(Qualified Text, TypeSignature)] -> [M.Doc]
 prettyPrintMethods =  moduleMethodBlocks . fmap (fmap printMethod) . fmap Map.toList . nest
   where printMethod (uri, (TypeSignature ts)) = M.ppr uri <> " : " <> M.ppr ts
+        printMethod (uri, TypeDefinition td) = "type " <> M.ppr uri <> " = " <> M.ppr td
         moduleMethodBlocks = fmap (uncurry (block . unpack . pprT)) . Map.toList
         nest = foldr (\((Qualified c d), a) m -> Map.unionWith (<>) m (newMap c d a)) Map.empty
         newMap c d a = Map.singleton c (Map.singleton d a)

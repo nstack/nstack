@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module NStack.Module.Types where
+module NStack.Module.Types (module NStack.Module.Types) where
 import Control.Lens (Lens', iso, Iso')   -- from: lens
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -22,8 +22,6 @@ import Data.UUID (UUID)
 import GHC.Generics (Generic)
 import Text.PrettyPrint.Mainland (Pretty, ppr, text, commasep)   -- from: mainland-pretty
 import Text.Printf (printf)
-import qualified Turtle as R
-import Turtle ((%))
 
 import NStack.Auth (UserName(..), nstackUserName)
 import NStack.SafeCopyOrphans ()
@@ -31,7 +29,7 @@ import NStack.UUIDOrphans ()
 import NStack.Prelude.Text (showT, putText, getText, pprS)
 
 
-data Stack = Python | NodeJS
+data Stack = Python | Python2 | NodeJS
   -- Custom Text  -- TODO - add a Custom Stack that reads config from a YAML file at build-time
   deriving (Show, Eq, Generic)
 
@@ -44,7 +42,7 @@ instance Pretty Stack where
 
 -- System stacks
 stacks :: [Stack]
-stacks = [Python, NodeJS]
+stacks = [Python, Python2, NodeJS]
 
 newtype NSUri = NSUri { _nsUri :: [Text] }
   deriving (Eq, Ord, Typeable, Data)
@@ -88,8 +86,8 @@ instance Migrate Version where
     if isRelease then Release else Snapshot
 
 instance Show Version where
-  show (Version ma mi p r) = T.unpack $
-    R.format (R.d%"."%R.d%"."%R.d) ma mi p <>
+  show (Version ma mi p r) =
+    show ma <> "." <> show mi <> "." <> show p <>
       case r of
         Release -> ""
         Snapshot -> "-SNAPSHOT"
@@ -155,7 +153,7 @@ instance Migrate ModuleName where
 
 -- | The name of an NStack function
 newtype FnName = FnName Text
-  deriving (Eq, Ord, Typeable, IsString, Pretty, Generic, ToJSON)
+  deriving (Eq, Ord, Typeable, IsString, Pretty, Generic, ToJSON, Typeable, Data)
 
 instance Show FnName where
   show = coerce T.unpack
@@ -196,10 +194,6 @@ instance Show a => Pretty (Qualified a) where
   ppr = text . show
 
 instance Serialize a => Serialize (Qualified a)
-
-
-
-
 
 newtype BaseImage = BaseImage { _baseImage :: T.Text }
   deriving (Eq)
@@ -242,7 +236,7 @@ $(deriveSafeCopy 0 'base ''Image)
 instance Serialize SHA512
 instance Serialize Image
 
-newtype BusName = BusName { _unBusName :: Text } deriving (Eq, Show)
+newtype BusName = BusName { _unBusName :: Text } deriving (Eq, Ord, Show, IsString)
 data DebugOpt = NoDebug | Debug deriving (Eq, Ord, Show, Generic)
 
 -- monoid instance for DebugOpt is OR

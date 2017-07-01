@@ -11,25 +11,29 @@ import Data.Maybe (isNothing)
 import Data.Text (Text)                        -- from: text
 import qualified Data.Text as T                -- from: text
 import qualified Data.Text.Read as T           -- from: text
-import qualified Text.Megaparsec.Text as P    -- from: megaparsec
-import Text.Megaparsec (spaceChar, alphaNumChar, char, parse, parseErrorPretty, many, parseMaybe, (<|>), anyChar, skipMany, eof, string)    -- from: megaparsec
+import Data.Void (Void)
+import Text.Megaparsec (Parsec, parse, parseErrorPretty, many, parseMaybe, (<|>), skipMany, eof)    -- from: megaparsec
+import Text.Megaparsec.Char (spaceChar, alphaNumChar, char, anyChar, string)    -- from: megaparsec
 import qualified Text.Megaparsec.Lexer as L    -- from: megaparsec
 
 import NStack.Auth (UserName(..), nstackUserName)
 import NStack.Module.Types
 import NStack.Prelude.Monad (maybeToExcept, eitherToExcept)
 
-spaceConsumer :: P.Parser ()
+type Parser = Parsec Void Text
+
+spaceConsumer :: Parser ()
 spaceConsumer = L.space (void spaceChar) (L.skipLineComment "/") (L.skipBlockCommentNested "/*" "*/")
 
-symbol :: String -> P.Parser String
+symbol :: String -> Parser String
 symbol    = L.symbol spaceConsumer
 
-pStack :: P.Parser Stack
-pStack = (Python <$ (string "python" <|> string "Python"))
+pStack :: Parser Stack
+pStack = ((string "python" <|> string "Python") *> ((Python2 <$ (string "27" <|> string "2"))
+                                                    <|> pure Python))
          <|> (NodeJS <$ (string "nodejs" <|> string "NodeJS"))
 
-inlineParser :: MonadError String m => P.Parser a -> Text -> m a
+inlineParser :: MonadError String m => Parser a -> Text -> m a
 inlineParser p = eitherToExcept . first parseErrorPretty . parse (spaces *> p <* spaces <* eof) ""
   where
     spaces = skipMany spaceChar
@@ -85,11 +89,11 @@ splitModName modname = do
     invalidChar c = throwError $ "Invalid character in module name: " ++ show c ++
       "\nValid characters are letters, numbers, '.', and '/'"
 
-pRawModuleName :: P.Parser String
+pRawModuleName :: Parser String
 pRawModuleName = many . asum $ alphaNumChar : map char ".:/-"
 
 -- | Parse and extract the raw modulename string from a DSL
-dslModuleName :: P.Parser Text
+dslModuleName :: Parser Text
 dslModuleName = T.pack <$> (spaceConsumer *> (symbol "module") *> pRawModuleName <* (skipMany anyChar) <* eof)
 
 -- | Parse and return the module name from a DSL

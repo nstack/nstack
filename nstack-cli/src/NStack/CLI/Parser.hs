@@ -6,7 +6,8 @@ import Control.Monad.Except (MonadError, runExcept)
 import Data.Monoid ((<>))
 import Data.String
 import Data.Text (Text, pack)
-import Text.Megaparsec (string, try, (<?>))    -- from: megaparsec
+import Text.Megaparsec (try, (<?>))    -- from: megaparsec
+import Text.Megaparsec.Char (string)    -- from: megaparsec
 
 import NStack.Auth (hexUserId, textSecretKey, UserName(..), validEmail)
 import NStack.CLI.Commands (Command(..), InitStack(..))
@@ -86,19 +87,25 @@ regOpts = RegisterCommand <$> (UserName . pack <$> argument str (metavar "userna
     pEmail = eitherReader $ (\x -> maybeToRight "Not a valid email address" (pack x ^? validEmail))
     serverFlag = option str (long "server" <> short 's' <> help "NStack Registry Server" <> showDefault <> value "demo-register.nstack.com:8443" <> metavar "SERVER")
 
--- | Parser for the register command options
 sendOpts :: Parser Command
 sendOpts = SendCommand <$> (argument str (metavar "path" <> help "Path the source was created on"))
                        <*> argument str (metavar "event" <> help "JSON Snippet to send as an event")
 
+testOpts :: Parser Command
+testOpts = TestCommand <$> pModuleName
+                       <*> pFnName
+                       <*> argument str (metavar "event" <> help "JSON Snippet to send as an event")
+
+
 listOpts :: Parser Command
 listOpts = hsubparser
   (  command "modules"   (info (pure ListModulesCommand) (progDesc "List all available modules"))
-  <> command "all"       (info (pure $ ListCommand Nothing) (progDesc "List all possible functions"))
+  <> command "all"       (info (pure $ ListCommand Nothing) (progDesc "List all functions and types"))
   <> command "sinks"     (info (pure $ ListCommand $ Just SinkType) (progDesc "List only sinks"))
   <> command "sources"   (info (pure $ ListCommand $ Just SourceType) (progDesc "List only sources"))
   <> command "functions" (info (pure $ ListCommand $ Just MethodType) (progDesc "List only unconnected functions"))
   <> command "workflows" (info (pure $ ListCommand $ Just WorkflowType) (progDesc "List only fully-connected workflows"))
+  <> command "types" (info (pure $ ListCommand $ Just TypeType) (progDesc "List only types"))
   ) <*> allSwitch
 
 loginOpts :: Parser Command
@@ -127,5 +134,6 @@ cmds =  hsubparser ( command "info" (info (InfoCommand <$> allSwitch) (progDesc 
                 <>  command "set-server" (info loginOpts (progDesc "Set authentication config for remote server"))
                 <>  command "register" (info regOpts (progDesc "Register user with the NStack Demo Server"))
                 <>  command "send" (info sendOpts (progDesc "Send event to HTTP Source on NStack Server"))
+                <>  command "test" (info testOpts (progDesc "Test executing function with a single given json-snippet value"))
                   )
           <|> hsubparser (command "log" (info logsOpts (progDesc "Show the logs of a running process")) <> internal)
