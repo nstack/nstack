@@ -3,6 +3,7 @@
 
 module NStack.Comms.Types where
 
+import Control.DeepSeq (NFData)
 import Data.ByteString (ByteString)  -- from: bytestring
 import Data.Coerce (coerce)
 import qualified Data.Map as Map
@@ -30,7 +31,7 @@ import NStack.Prelude.Time (timeToUnix, timeFromUnix)
 -- general newtypes used from client/server comms
 
 newtype StartTime = StartTime UTCTime
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, NFData)
 
 instance Show StartTime where
   show (StartTime t) = show t
@@ -50,7 +51,7 @@ instance SafeCopy StartTime where
   getCopy = contain $ StartTime . toThyme <$> safeGet
 
 newtype ProcessId = ProcessId Text
-  deriving (Eq, Pretty, Ord)
+  deriving (Eq, Pretty, Ord, Generic, NFData)
 
 newtype GitRepo = GitRepo { _gitRepo :: Bool }
   deriving (Eq)
@@ -59,7 +60,9 @@ data ProcessInfo = ProcessInfo
   { _processId :: ProcessId
   , _timestamp :: StartTime
   , _command :: Text
-  } deriving (Eq, Ord, Show)
+  } deriving (Eq, Ord, Show, Generic)
+
+instance NFData ProcessInfo
 
 instance Pretty ProcessInfo where
   ppr (ProcessInfo (ProcessId p) t c) =  ppr p <> spaces 5 <> ppr t <> spaces 2 <> align (stack $ ppr <$> T.lines c)
@@ -68,22 +71,29 @@ newtype ContainerId = ContainerId { _containerId :: Text } -- systemd dbus objec
 newtype BuildTarball = BuildTarball { _buildTarball :: ByteString }
 newtype WorkflowSrc = WorkflowSrc { _workflowSrc :: Text }
 newtype LogsLine = LogsLine { _logLine :: Text }
-  deriving (Pretty, Eq)
+  deriving (Pretty, Eq, Generic)
+
+instance NFData LogsLine
+
 data TypeSignature
   = TypeSignature Text
     -- ^ the 'QFnName' is a function with this type signature
   | TypeDefinition Text
     -- ^ the 'QFnName' is a type with this definition
-  deriving (Show, Generic)
+  deriving (Show, Generic, Eq)
 newtype DSLSource = DSLSource { _src :: Text }
   deriving (Eq, Ord, Typeable, IsString)
+
+instance NFData TypeSignature
 
 -- | Simplified nstack-server info for sending to the CLI
 data ServerInfo = ServerInfo {
   _processes  :: [ProcessInfo],
   _methods    :: Map.Map QFnName TypeSignature,
   _modules    :: Map.Map ModuleName ModuleInfo }
-  deriving (Generic)
+  deriving (Eq, Show, Generic)
+
+instance NFData ServerInfo
 
 -- | Simplified module info for sending to the CLI
 data ModuleInfo = ModuleInfo {
@@ -91,7 +101,9 @@ data ModuleInfo = ModuleInfo {
   _miImage :: Image,
   _miParent :: Maybe ModuleName,
   _miIsFramework :: Bool
-} deriving (Generic)
+} deriving (Generic, Eq, Show)
+
+instance NFData ModuleInfo
 
 
 data EntityType = MethodType | SourceType | SinkType | WorkflowType | TypeType

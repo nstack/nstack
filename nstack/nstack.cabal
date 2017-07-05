@@ -1,5 +1,5 @@
 name: nstack
-version: 0.0.6.3
+version: 0.0.6.4
 cabal-version: >=1.22
 build-type: Simple
 license: BSD3
@@ -49,10 +49,12 @@ library
         constraints,
         containers,
         cryptonite,
+        deepseq,
         directory,
         either,
         exceptions,
         filepath,
+        filemanip,
         foldl,
         gitrev,
         generic-deriving,

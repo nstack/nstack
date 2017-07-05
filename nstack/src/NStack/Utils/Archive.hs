@@ -1,17 +1,48 @@
 module NStack.Utils.Archive (
-pack, unpack
+pack, expandCheckPack, unpack
 ) where
 
+import Control.Monad (filterM, forM)
 import qualified Codec.Archive.Tar as Tar  -- from: tar
 import qualified Data.ByteString.Lazy as BS  -- from: bytestring
-import qualified Turtle as R               -- from: turtle
+import System.FilePath ((</>))
+import System.Directory (doesFileExist)
+import System.FilePath.Glob (namesMatching)
+import NStack.Prelude.Exception (throwPermanentError)
 
-import NStack.Prelude.FilePath (fromFP)
+-- | Create a tar archive from a list of files
+pack
+  :: FilePath -- ^ base directory
+  -> [FilePath] -- ^ list of files to archive
+  -> IO BS.ByteString
+pack dir files = Tar.write <$> Tar.pack dir files
 
--- | Convert a directory into a tar archive
-pack :: R.FilePath -> IO BS.ByteString
-pack dir = Tar.write <$> Tar.pack (fromFP dir) ["."]
+-- | Expand globs, check that files exist, and pack them
+--
+-- See <https://github.com/nstack/nstack-server/issues/432> for the
+-- context.
+expandCheckPack
+  :: FilePath -- ^ base directory
+  -> [FilePath]
+      -- ^ List of optional files to archive.
+      -- If any of these don't exist, they are silently skipped.
+  -> [FilePath]
+      -- ^ List of glob patterns.
+      -- Each pattern must expand to at least one file.
+  -> IO BS.ByteString
+expandCheckPack dir opt_files globs = do
+
+  globbed_files <- fmap concat . forM globs $ \glob -> do
+    files <- namesMatching (dir </> glob)
+    if null files
+      then throwPermanentError $ "Pattern " ++ glob ++ " did not match any files"
+      else return files
+  existing_opt_files <- filterM doesFileExist opt_files
+
+  let files = existing_opt_files ++ globbed_files
+
+  pack dir files
 
 -- | Unpack a tar project archive to a directory
-unpack :: R.FilePath -> BS.ByteString -> IO ()
-unpack path = Tar.unpack (fromFP path) . Tar.read
+unpack :: FilePath -> BS.ByteString -> IO ()
+unpack path = Tar.unpack path . Tar.read

@@ -1,5 +1,6 @@
 module NStack.Settings.Types where
 import Control.Applicative (empty, (<|>))
+import Control.DeepSeq
 import Control.Lens hiding ((.=))               -- from: lens
 import Control.Monad (mfilter)
 import Control.Monad.Reader (ReaderT(..))       -- from: mtl
@@ -9,6 +10,7 @@ import Data.Coerce
 import Data.String
 import Data.Text (Text, toLower)                -- from: text
 import Data.UUID (UUID)                         -- from: uuid
+import GHC.Generics
 
 import NStack.Auth (SecretKey, UserId)
 
@@ -35,6 +37,7 @@ instance FromJSON AnalyticsSettings where
 instance ToJSON AnalyticsSettings where
   toJSON a = String $ a ^. re analyticsSettings
 
+-- TODO - Use the existing URI type
 newtype HostName = HostName Text deriving (Eq, Show, IsString)
 
 instance ToJSON HostName where
@@ -48,15 +51,18 @@ data Settings = Settings { _installId :: Maybe InstallID,
                            _analytics :: Maybe AnalyticsSettings,
                            _authSettings :: Maybe AuthSettings,
                            _authServer :: Maybe HostName,
-                           _server :: Maybe ServerDetails }
+                           _server :: Maybe ServerDetails,
+                           _frontendHost :: Maybe HostName }
   deriving (Eq, Show)
 
 data AuthSettings = NStackHMAC UserId SecretKey
                   | Trust SecretKey
-                  deriving (Eq, Show)
+                  deriving (Eq, Show, Generic)
 
 data ServerDetails = ServerDetails { _hostname :: Maybe HostName,
                                      _port :: Maybe Int } deriving (Eq, Show)
+
+instance NFData AuthSettings
 
 instance FromJSON ServerDetails where
   parseJSON (Object o) = ServerDetails <$> (o .:? "hostname") <*> (o .:? "port")
@@ -79,7 +85,7 @@ instance ToJSON AuthSettings where
                                "secret-key" .= key]
 
 defaultSettings :: Settings
-defaultSettings = Settings { _installId = Nothing, _analytics = Nothing, _authSettings = Nothing, _authServer = Nothing, _server = Nothing }
+defaultSettings = Settings { _installId = Nothing, _analytics = Nothing, _authSettings = Nothing, _authServer = Nothing, _server = Nothing, _frontendHost = Nothing }
 
 installId :: Lens' Settings (Maybe InstallID)
 installId f s = (\r -> s { _installId = r }) <$> f (_installId s)
@@ -92,6 +98,9 @@ authSettings f s = (\r -> s { _authSettings = r }) <$> f (_authSettings s)
 
 authServer :: Lens' Settings (Maybe HostName)
 authServer f s = (\r -> s { _authServer = r }) <$> f (_authServer s)
+
+frontendHost :: Lens' Settings (Maybe HostName)
+frontendHost f s = (\r -> s { _frontendHost = r }) <$> f (_frontendHost s)
 
 authKey :: Lens' AuthSettings SecretKey
 authKey f = \case
@@ -115,11 +124,14 @@ serverPort f s = (\r -> s { _port = r }) <$> f (_port s)
 defaultAuthServer :: HostName
 defaultAuthServer = HostName "http://localhost:8443"
 
+defaultFrontendHost :: HostName
+defaultFrontendHost = HostName "http://localhost:8000"
+
 defaultServerDetails :: ServerDetails
 defaultServerDetails = ServerDetails Nothing Nothing
 
 instance FromJSON Settings where
-  parseJSON (Object v) = Settings <$> v .:? "install-id" <*> v .:? "analytics" <*> v .:? "authentication" <*> v .:? "auth-server" <*> v .:? "server"
+  parseJSON (Object v) = Settings <$> v .:? "install-id" <*> v .:? "analytics" <*> v .:? "authentication" <*> v .:? "auth-server" <*> v .:? "server" <*> v .:? "frontend-host"
   parseJSON _          = empty
 
 instance ToJSON Settings where
@@ -127,7 +139,8 @@ instance ToJSON Settings where
                      "install-id" .= (a ^. installId),
                      "authentication" .= (a ^. authSettings),
                      "server" .= (a ^. serverConn),
-                     "auth-server" .= (a ^. authServer)]
+                     "auth-server" .= (a ^. authServer),
+                     "frontend-host" .= (a ^. frontendHost)]
 
 class MonadSettings m where
   settings :: m Settings

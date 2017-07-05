@@ -44,7 +44,7 @@ import Network.HTTP.Client hiding (responseStatus)
 import Network.HTTP.Client.TLS (mkManagerSettings)
 import Network.Wreq hiding (responseCookieJar)
 import Util ((<||>))                 -- ghc
-import System.Directory (getCurrentDirectory, getXdgDirectory, XdgDirectory(..))
+import System.Directory (getXdgDirectory, XdgDirectory(..))
 import System.IO.Error (isDoesNotExistError)
 import qualified Text.Mustache as M  -- mustache
 import Text.Mustache ((~>))          -- mustache
@@ -60,9 +60,9 @@ import NStack.Comms.Types (GitRepo(..), ProcessId(..), ProcessInfo(..), ModuleIn
 import NStack.Module.Types (Stack, BaseImage(..), DebugOpt(..), ModuleName(..), FnName(..), Qualified(..), showShortModuleName)
 import NStack.Module.Parser (parseModuleName)
 import qualified NStack.Utils.Archive as Archive
-import NStack.Module.ConfigFile (configFile)
+import NStack.Module.ConfigFile (configFile, workflowFile)
 import NStack.Prelude.Applicative ((<&>))
-import NStack.Prelude.FilePath (fpToText, fromFP, toFP)
+import NStack.Prelude.FilePath (fpToText, fromFP)
 import NStack.Prelude.Shell (runCmd_)
 import NStack.Prelude.Monad (eitherToExcept, maybeToExcept)
 import NStack.Prelude.Text (pprT, capitaliseT, prettyT, prettyT')
@@ -163,10 +163,14 @@ initGitRepo = liftIO $ do
   -- Sh.run "git" ["branch", "nstack"]
 
 -- | Returns the artefacts needed to build a module
-buildArtefacts :: CCmdEff m => m ByteString
-buildArtefacts = do
-  srcDir <- toFP <$> liftIO getCurrentDirectory
-  liftIO $ Archive.pack srcDir
+buildArtefacts
+  :: CCmdEff m
+  => FilePath -- ^ directory
+  -> [FilePath] -- ^ globs from the files section of nstack.yaml
+  -> m ByteString
+buildArtefacts dir globs = do
+  let std_files = [configFile, workflowFile, "setup.py", "service.py", "requirements.txt"]
+  liftIO $ Archive.expandCheckPack dir std_files globs
 
 printInfo :: ServerInfo -> Text
 printInfo (ServerInfo ps meths ms) = prettyT' $

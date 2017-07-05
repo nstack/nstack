@@ -1,7 +1,7 @@
 module Main where
 
 import Control.Concurrent (threadDelay)
-import Control.Exception (catch, displayException, fromException)
+import Control.Exception (catch, displayException, fromException, SomeException)
 import Control.Lens
 import Control.Monad (forM_, forever, void)
 import Control.Monad.Classes (ask)  -- from: monad-classes
@@ -43,9 +43,11 @@ import qualified NStack.CLI.Commands as CLI
 import NStack.Common.Environment (httpApiPort)
 import NStack.Comms.Types
 import NStack.Comms.ApiHashValue (apiHashValue)
-import NStack.Module.ConfigFile (configFile, workflowFile, projectFile, getProjectFile, _projectModules)
+import NStack.Module.ConfigFile (ConfigFile(..), configFile, getConfigFile,
+  workflowFile, projectFile, getProjectFile, _projectModules)
 import NStack.Module.Types (ModuleName, FnName, Qualified(..))
 import NStack.Prelude.Text (pprT, prettyLinesOr, joinLines, showT)
+import NStack.Prelude.FilePath (fromFP)
 import NStack.Settings
 import NStack.Utils.Debug (versionMsg)
 
@@ -55,12 +57,14 @@ opts = flag' Nothing (long "version" <> hidden) <|> (Just <$> cmds)
 
 -- | Main - calls to remote nstack-server
 main :: IO ()
-main = do
+main =
+  (do
   cmd <- customExecParser (prefs showHelpOnError) opts'
   manager <- newManager $ mkManagerSettings allowSelfSigned Nothing
   server <- runSettingsT serverPath
   let transport = Transport $ callWithHttp manager server
   maybe printVersion (runClient transport . run) cmd
+  ) `catch` (hPutStrLn stderr . ("Error: "++) . displayException @SomeException)
   where
     printVersion = putStrLn versionMsg
     opts' = info (helper <*> opts) (fullDesc
@@ -107,16 +111,12 @@ run (BuildCommand) =
     projectBuild = do
       liftInput . HL.outputStrLn $ "Building NStack Project. Please wait. This may take some time."
       modules <- _projectModules <$> getProjectFile
-      projectPath <- R.pwd
-      -- change to each dir and run build
       forM_ modules $ \modPath -> do
         liftInput . HL.outputStrLn . unpack $ R.format ("Building " % R.fp) modPath
-        R.cd modPath
-        buildCurrentDirectory
-        R.cd projectPath
+        buildDirectory modPath
     workflowModule = do
       liftInput . HL.outputStrLn $ "Building an NStack module. Please wait. This may take some time."
-      buildCurrentDirectory
+      buildDirectory "."
 run (LoginCommand a b c d)    = CLI.loginSettings a b c d
 run (RegisterCommand userName email mServer) = CLI.registerCommand userName email mServer
 run (SendCommand path' snippet) = CLI.sendCommand path' snippet
@@ -139,12 +139,18 @@ run (TestCommand mod' fn snippet) = do
 randomPath :: IO Text
 randomPath = ("/" <>) . UUID.toText <$> randomIO
 
--- | Build an nstack module (not a project) that resides in the current
+-- | Build an nstack module (not a project) that resides in the given
 -- directory
-buildCurrentDirectory :: CCmd ()
-buildCurrentDirectory = do
-  -- TODO be smarter about which files we package
-  package <- CLI.buildArtefacts
+buildDirectory :: R.FilePath -> CCmd ()
+buildDirectory dir = do
+  globs <- ifM (R.testfile (dir R.</> configFile))
+    (do
+      config <- liftIO $ getConfigFile dir
+      return $ T.unpack <$> _cfgFiles config
+    )
+    (return [])
+
+  package <- CLI.buildArtefacts (fromFP dir) globs
   callServer buildCommand (BuildTarball $ toStrict package) showModuleBuild
 
 -- | Run a command on the user client
