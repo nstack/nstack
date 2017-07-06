@@ -5,7 +5,8 @@ pack, expandCheckPack, unpack
 import Control.Monad (filterM, forM)
 import qualified Codec.Archive.Tar as Tar  -- from: tar
 import qualified Data.ByteString.Lazy as BS  -- from: bytestring
-import System.FilePath ((</>))
+import Data.List (nub)
+import System.FilePath ((</>), joinPath, splitDirectories)
 import System.Directory (doesFileExist)
 import System.FilePath.Glob (namesMatching)
 import NStack.Prelude.Exception (throwPermanentError)
@@ -37,11 +38,16 @@ expandCheckPack dir opt_files globs = do
     if null files
       then throwPermanentError $ "Pattern " ++ glob ++ " did not match any files"
       else return files
-  existing_opt_files <- filterM doesFileExist opt_files
+  existing_opt_files <- filterM doesFileExist . fmap (dir </>) $ opt_files
 
-  let files = existing_opt_files ++ globbed_files
-
+  let files = fmap (makeRelativePath dir) . nub $ existing_opt_files ++ globbed_files
   pack dir files
+
+-- | Make a path relative to a new root, assumes each path is nested within the new root
+makeRelativePath :: FilePath -> FilePath -> FilePath
+makeRelativePath dir file = joinPath $ drop (length dirs) files
+  where dirs = splitDirectories dir
+        files = splitDirectories file
 
 -- | Unpack a tar project archive to a directory
 unpack :: FilePath -> BS.ByteString -> IO ()
