@@ -4,6 +4,7 @@ module NStack.Prelude.FilePath (
 , fromFP
 , formatFP
 , fpToText
+, directory
 ) where
 
 import Control.Monad.Except (MonadError)
@@ -26,4 +27,5 @@ fpToText = eitherToExcept . first (("Failed to parse FilePath. Attempt was: " ++
 formatFP :: FP.FilePath -> Text
 formatFP = format fp
 
-
+directory :: FilePath -> FilePath
+directory = fromFP . FP.directory . toFP

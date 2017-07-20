@@ -116,12 +116,17 @@ loginOpts = LoginCommand <$> argument (fromString <$> str) (metavar "SERVER_HOST
             where userId    = maybeReader $ (^? hexUserId) . fromString
                   secretKey = maybeReader $ (^? textSecretKey) . fromString
 
+buildOpts :: Parser Command
+buildOpts = BuildCommand
+  <$> flag FailBadModules DropBadModules
+        (long "force" <> short 'f' <> help "drop downstream modules that are broken by the new version of this module")
+
 -- | Parser for all subcommand options
 cmds :: Parser Command
 cmds =  hsubparser ( command "info" (info (InfoCommand <$> allSwitch) (progDesc "Show the server status"))
                 <>  command "init" (info initOpts (progDesc "Initialise a new module/workflow"))
                 <>  command "list" (info (helper <*> listOpts) (progDesc "List registered modules or functions"))
-                <>  command "build" (info (pure BuildCommand) (progDesc "Build module"))
+                <>  command "build" (info buildOpts (progDesc "Build module"))
                 <>  command "delete" (info (DeleteModuleCommand <$> pModuleName) (progDesc "Delete a module"))
                 <>  command "start" (info startOpts (progDesc "Start a workflow"))
                 <>  command "notebook" (info notebookOpts (progDesc "Enter some DSL interactively"))

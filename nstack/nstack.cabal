@@ -1,5 +1,5 @@
 name: nstack
-version: 0.0.6.5
+version: 0.0.7
 cabal-version: >=1.22
 build-type: Simple
 license: BSD3
@@ -49,7 +49,6 @@ library
         constraints,
         containers,
         cryptonite,
-        deepseq,
         directory,
         either,
         exceptions,
@@ -97,6 +96,7 @@ library
         vector,
         vector-space,
         yaml,
+        yaml-combinators,
         nstack-prelude -any
     if !impl(ghcjs)
       build-depends:
@@ -144,7 +144,7 @@ library
     other-modules:
           Paths_nstack
           NStack.Settings.Types
-          NStack.Settings.Internal.Lens
+          NStack.Settings.Parser
 
     ghc-options: -Wall -fno-warn-type-defaults -optc-Os -O2
 

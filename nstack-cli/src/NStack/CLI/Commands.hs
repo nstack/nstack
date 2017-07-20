@@ -44,7 +44,7 @@ import Network.HTTP.Client hiding (responseStatus)
 import Network.HTTP.Client.TLS (mkManagerSettings)
 import Network.Wreq hiding (responseCookieJar)
 import Util ((<||>))                 -- ghc
-import System.Directory (getXdgDirectory, XdgDirectory(..))
+import System.Directory (getXdgDirectory, XdgDirectory(..), createDirectoryIfMissing)
 import System.IO.Error (isDoesNotExistError)
 import qualified Text.Mustache as M  -- mustache
 import Text.Mustache ((~>))          -- mustache
@@ -56,13 +56,13 @@ import NStack.Auth
 import NStack.CLI.Auth (allowSelfSigned)
 import NStack.CLI.Types
 import NStack.CLI.Templates (createFromTemplate)
-import NStack.Comms.Types (GitRepo(..), ProcessId(..), ProcessInfo(..), ModuleInfo(..), ServerInfo(..), EntityType, TypeSignature(..), DSLSource(..))
+import NStack.Comms.Types (GitRepo(..), ProcessId(..), ProcessInfo(..), ModuleInfo(..), ServerInfo(..), EntityType, TypeSignature(..), DSLSource(..), DropBadModules)
 import NStack.Module.Types (Stack, BaseImage(..), DebugOpt(..), ModuleName(..), FnName(..), Qualified(..), showShortModuleName)
 import NStack.Module.Parser (parseModuleName)
 import qualified NStack.Utils.Archive as Archive
 import NStack.Module.ConfigFile (configFile, workflowFile)
 import NStack.Prelude.Applicative ((<&>))
-import NStack.Prelude.FilePath (fpToText, fromFP)
+import NStack.Prelude.FilePath (fpToText, fromFP, directory)
 import NStack.Prelude.Shell (runCmd_)
 import NStack.Prelude.Monad (eitherToExcept, maybeToExcept)
 import NStack.Prelude.Text (pprT, capitaliseT, prettyT, prettyT')
@@ -87,7 +87,7 @@ data Command
   | DeleteModuleCommand ModuleName
   | ListProcessesCommand
   | GarbageCollectCommand
-  | BuildCommand
+  | BuildCommand DropBadModules
   | RegisterCommand UserName Email ServerAddr
   | SendCommand Path Snippet
   | TestCommand ModuleName FnName Snippet
@@ -290,5 +290,7 @@ callWithCookieJar mkRequest = do
   res <- mkRequest reqCookieJar
   -- TODO - we should take in the current cookieJar and update here, wreq should do this automatically
   -- let (cookieJar', res') = updateCookieJar res
+
+  createDirectoryIfMissing True (directory cookieFilePath) -- just in case ~/.cache does not exist
   writeFile cookieFilePath . show . responseCookieJar $ res
   return res

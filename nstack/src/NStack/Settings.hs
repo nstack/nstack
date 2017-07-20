@@ -16,7 +16,10 @@ module NStack.Settings (SettingsT,
                         HostName(..),
                         defaultAuthServer,
                         frontendHost,
+                        serviceLimits,
+                        cliTimeout,
                         defaultFrontendHost,
+                        runSettingsParser,
                         serverConn,
                         serverHostname,
                         serverPort,
@@ -24,19 +27,24 @@ module NStack.Settings (SettingsT,
                        ) where
 import Control.Exception
 import Control.Lens                        -- from: lens
-import Control.Monad (unless, guard)
+import Control.Monad (when, unless, guard)
 import Control.Monad.Trans                 -- from: mtl
 import qualified Data.ByteString as BS     -- from: bytestring
 import Data.List (isPrefixOf)
 import Data.UUID (UUID)                    -- from: uuid
 import Data.UUID.V1 (nextUUID)             -- from: uuid
 import System.Directory (getXdgDirectory,
-                         XdgDirectory(..)) -- from: directory
+                         XdgDirectory(..),
+                         createDirectoryIfMissing) -- from: directory
 import System.IO.Error (isDoesNotExistError)
 
-import NStack.Settings.Internal.Lens
+import NStack.Prelude.Exception (throwPermanentError)
+import NStack.Prelude.FilePath (directory)
 import NStack.Settings.Types hiding (runSettingsT)
+import NStack.Settings.Parser
 import qualified NStack.Settings.Types as Types
+import qualified Data.Yaml as Yaml
+
 
 settingsFileName :: FilePath
 settingsFileName = "nstack.conf"
@@ -54,6 +62,7 @@ settingsFilePath = configDir <&> \fp ->
                       if "/root/" `isPrefixOf` fp
                         then etcloc
                         else fp
+                                 
   where configDir = getXdgDirectory XdgConfig settingsFileName `catch` fallback
         etcloc = "/etc/nstack/" ++ settingsFileName
         -- getHomeDirectory on unix is simply an env var lookup
@@ -64,11 +73,11 @@ settingsFilePath = configDir <&> \fp ->
         fallback :: IOException -> IO FilePath
         fallback _ = return etcloc
 
-data BadConfigException = BadConfigException FilePath
+data BadConfigException = BadConfigException FilePath String
   deriving Eq
 
 instance Show BadConfigException where
-  show (BadConfigException path) = "Config file " ++ path ++ " is not valid"
+  show (BadConfigException path parseError) = "Config file " ++ path ++ " is not valid. Parse error: " ++ parseError
 
 instance Exception BadConfigException
 
@@ -77,12 +86,16 @@ loadSettings =
   catchJust (guard . isDoesNotExistError)
     (do path <- settingsFilePath
         dat <- BS.readFile path
-        maybe (throwIO $ BadConfigException path) return $ dat ^? _YAML
+        either (throwIO . BadConfigException path) return (runSettingsParser dat)
     )
     (const defWithWrite)
-               where defWithWrite = do s <- defaultSettingsWithInstallId
-                                       writeSettings s
-                                       return s
+               where defWithWrite = do 
+                       s <- defaultSettingsWithInstallId
+                       settingsPath <- settingsFilePath
+
+                       unless ("/etc/nstack" `isPrefixOf` settingsPath) (writeSettings s)
+
+                       return s
 
 defaultSettingsWithInstallId :: IO Settings
 defaultSettingsWithInstallId = setInstallId <$> getUUID
@@ -92,8 +105,17 @@ getUUID :: IO UUID
 getUUID = nextUUID >>= maybe getUUID pure
 
 writeSettings :: Settings -> IO ()
-writeSettings s = settingsFilePath >>= \f -> BS.writeFile f (s ^. re _YAML)
+writeSettings s = do
+  path <- settingsFilePath
+
+  when ("/etc/nstack" `isPrefixOf` path) (throwPermanentError "Setting were tried to be written to /etc/nstack/")
+  -- create parent directories of the settings file if they don't exist
+  createDirectoryIfMissing True (directory path)
+
+  BS.writeFile path (Yaml.encode s)
+
 
 runSettingsT :: MonadIO m => SettingsT m m a -> m a
 runSettingsT m = Types.runSettingsT m $ buildSettingOp loadSettings write' liftIO
   where write' orig new = unless (orig == new) $ writeSettings new
+

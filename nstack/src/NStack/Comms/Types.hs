@@ -1,9 +1,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module NStack.Comms.Types where
+module NStack.Comms.Types (module NStack.Comms.Types) where
 
-import Control.DeepSeq (NFData)
 import Data.ByteString (ByteString)  -- from: bytestring
 import Data.Coerce (coerce)
 import qualified Data.Map as Map
@@ -31,7 +30,7 @@ import NStack.Prelude.Time (timeToUnix, timeFromUnix)
 -- general newtypes used from client/server comms
 
 newtype StartTime = StartTime UTCTime
-  deriving (Eq, Ord, NFData)
+  deriving (Eq, Ord)
 
 instance Show StartTime where
   show (StartTime t) = show t
@@ -51,7 +50,7 @@ instance SafeCopy StartTime where
   getCopy = contain $ StartTime . toThyme <$> safeGet
 
 newtype ProcessId = ProcessId Text
-  deriving (Eq, Pretty, Ord, Generic, NFData)
+  deriving (Eq, Pretty, Ord, Generic)
 
 newtype GitRepo = GitRepo { _gitRepo :: Bool }
   deriving (Eq)
@@ -62,8 +61,6 @@ data ProcessInfo = ProcessInfo
   , _command :: Text
   } deriving (Eq, Ord, Show, Generic)
 
-instance NFData ProcessInfo
-
 instance Pretty ProcessInfo where
   ppr (ProcessInfo (ProcessId p) t c) =  ppr p <> spaces 5 <> ppr t <> spaces 2 <> align (stack $ ppr <$> T.lines c)
 
@@ -72,8 +69,6 @@ newtype BuildTarball = BuildTarball { _buildTarball :: ByteString }
 newtype WorkflowSrc = WorkflowSrc { _workflowSrc :: Text }
 newtype LogsLine = LogsLine { _logLine :: Text }
   deriving (Pretty, Eq, Generic)
-
-instance NFData LogsLine
 
 data TypeSignature
   = TypeSignature Text
@@ -84,16 +79,12 @@ data TypeSignature
 newtype DSLSource = DSLSource { _src :: Text }
   deriving (Eq, Ord, Typeable, IsString)
 
-instance NFData TypeSignature
-
 -- | Simplified nstack-server info for sending to the CLI
 data ServerInfo = ServerInfo {
   _processes  :: [ProcessInfo],
   _methods    :: Map.Map QFnName TypeSignature,
   _modules    :: Map.Map ModuleName ModuleInfo }
   deriving (Eq, Show, Generic)
-
-instance NFData ServerInfo
 
 -- | Simplified module info for sending to the CLI
 data ModuleInfo = ModuleInfo {
@@ -103,13 +94,20 @@ data ModuleInfo = ModuleInfo {
   _miIsFramework :: Bool
 } deriving (Generic, Eq, Show)
 
-instance NFData ModuleInfo
-
 
 data EntityType = MethodType | SourceType | SinkType | WorkflowType | TypeType
   deriving (Eq, Show, Generic)
 
 instance Serialize EntityType
+
+data ContainerData = ContainerData {
+  _containerTypeSigs :: Text,
+  _containerCode :: Text,
+  _containerYaml :: Text,
+  _containerReqs :: Text
+  } deriving (Generic, Eq, Show)
+
+instance Serialize ContainerData
 
 instance Show ProcessId where
   show = coerce $ show @Text
@@ -167,6 +165,12 @@ instance Serialize ModuleInfo
 deriveSafeCopy 0 'base ''ProcessId
 deriveSafeCopy 0 'base ''ProcessInfo
 deriveSafeCopy 0 'base ''ContainerId
+
+-- | If we encounter a module that doesn't build, should we fail or
+-- siltently drop it and all its reverse dependencies?
+data DropBadModules = DropBadModules | FailBadModules
+  deriving (Eq, Show, Generic)
+instance Serialize DropBadModules
 
 -- NStack Toolkit/Server Communication
 newtype ServerReturn a = ServerReturn { _serverReturn :: Either StructuredError a } -- return type used internally for commands
@@ -248,8 +252,11 @@ listProcessesCommand = ApiCall "ListProcessesCommand"
 gcCommand :: ApiCall () [UUID]
 gcCommand = ApiCall "GarbageCollectCommand"
 
-buildCommand :: ApiCall BuildTarball ModuleName
+buildCommand :: ApiCall (BuildTarball, DropBadModules) ModuleName
 buildCommand = ApiCall "BuildCommand"
+
+buildFrontendCommand :: ApiCall (ContainerData, DropBadModules) ModuleName
+buildFrontendCommand = ApiCall "BuildFrontendCommand"
 
 testCommand :: ApiCall (QFnName, HttpPath) ProcessInfo
 testCommand = ApiCall "TestCommand"
@@ -260,6 +267,8 @@ testCommand = ApiCall "TestCommand"
 allApiCalls :: [Name]
 allApiCalls =
   [ 'buildCommand
+  -- should this even be in the version hash as it's not called on the CLI
+  , 'buildFrontendCommand
   , 'deleteModuleCommand
   , 'gcCommand
   , 'infoCommand

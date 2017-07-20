@@ -1,7 +1,7 @@
 module Main where
 
 import Control.Concurrent (threadDelay)
-import Control.Exception (catch, displayException, fromException, SomeException)
+import Control.Exception (catch, handleJust, displayException, fromException, SomeException, AsyncException(UserInterrupt))
 import Control.Lens
 import Control.Monad (forM_, forever, void)
 import Control.Monad.Classes (ask)  -- from: monad-classes
@@ -23,7 +23,7 @@ import qualified Data.UUID as UUID
 import Options.Applicative      -- optparse-applicative
 import qualified System.Console.Haskeline as HL
 import System.Info (os)
-import System.Exit (exitFailure)
+import System.Exit (exitFailure, ExitCode)
 import System.IO (hPutStrLn, stderr, hIsTerminalDevice, stdin, stdout)
 import System.IO.Error (isEOFError)
 import System.Random (randomIO)
@@ -57,14 +57,20 @@ opts = flag' Nothing (long "version" <> hidden) <|> (Just <$> cmds)
 
 -- | Main - calls to remote nstack-server
 main :: IO ()
-main =
+main = handleJust
+  (\e -> if
+    | Just (_ :: ExitCode) <- fromException e -> Nothing
+    | Just UserInterrupt <- fromException e -> Nothing
+    | otherwise -> Just e
+  )
+  (hPutStrLn stderr . ("Error: "++) . displayException @SomeException)
   (do
   cmd <- customExecParser (prefs showHelpOnError) opts'
   manager <- newManager $ mkManagerSettings allowSelfSigned Nothing
   server <- runSettingsT serverPath
   let transport = Transport $ callWithHttp manager server
   maybe printVersion (runClient transport . run) cmd
-  ) `catch` (hPutStrLn stderr . ("Error: "++) . displayException @SomeException)
+  )
   where
     printVersion = putStrLn versionMsg
     opts' = info (helper <*> opts) (fullDesc
@@ -103,7 +109,7 @@ run (DeleteModuleCommand m)   = callServer deleteModuleCommand m (const $ "Modul
 run (ListProcessesCommand)    = callServer listProcessesCommand () CLI.printProcesses
 run (GarbageCollectCommand)   = callServer gcCommand () (`prettyLinesOr` "Nothing removed")
 run (ConnectCommand pId)      = connectStdInOut pId
-run (BuildCommand) =
+run (BuildCommand dropBadModules) =
   ifM (R.testfile projectFile) projectBuild
     (ifM (R.testfile configFile ||^ R.testfile workflowFile) workflowModule
       (throwError (unpack $ R.format ("A valid nstack build file ("%R.fp%", "%R.fp%", "%R.fp%") was not found") projectFile configFile workflowFile)))
@@ -113,10 +119,10 @@ run (BuildCommand) =
       modules <- _projectModules <$> getProjectFile
       forM_ modules $ \modPath -> do
         liftInput . HL.outputStrLn . unpack $ R.format ("Building " % R.fp) modPath
-        buildDirectory modPath
+        buildDirectory dropBadModules modPath
     workflowModule = do
       liftInput . HL.outputStrLn $ "Building an NStack module. Please wait. This may take some time."
-      buildDirectory "."
+      buildDirectory dropBadModules "."
 run (LoginCommand a b c d)    = CLI.loginSettings a b c d
 run (RegisterCommand userName email mServer) = CLI.registerCommand userName email mServer
 run (SendCommand path' snippet) = CLI.sendCommand path' snippet
@@ -141,8 +147,8 @@ randomPath = ("/" <>) . UUID.toText <$> randomIO
 
 -- | Build an nstack module (not a project) that resides in the given
 -- directory
-buildDirectory :: R.FilePath -> CCmd ()
-buildDirectory dir = do
+buildDirectory :: DropBadModules -> R.FilePath -> CCmd ()
+buildDirectory dropBadModules dir = do
   globs <- ifM (R.testfile (dir R.</> configFile))
     (do
       config <- liftIO $ getConfigFile dir
@@ -151,7 +157,7 @@ buildDirectory dir = do
     (return [])
 
   package <- CLI.buildArtefacts (fromFP dir) globs
-  callServer buildCommand (BuildTarball $ toStrict package) showModuleBuild
+  callServer buildCommand (BuildTarball $ toStrict package, dropBadModules) showModuleBuild
 
 -- | Run a command on the user client
 runClient :: Transport -> CCmd () -> IO ()
@@ -222,15 +228,16 @@ serverPath = do
 callWithHttp :: CCmdEff m => Manager -> String -> ApiCall a b -> a -> m (Result b)
 callWithHttp manager hostname (ApiCall name) args = do
   auth <- (^. authSettings) <$> settings
-  liftIO $ maybe (return $ err) (doCall manager path' $ encode args) auth
+  timeout <- (^. cliTimeout) <$> settings
+  liftIO $ maybe (return err) (doCall manager path' (encode args) timeout) auth
     where path' = hostname <> unpack name
           err = ClientError "Missing or invalid credentials. Please run the 'nstack set-server' command as described in your email."
 
 handleHttpErr :: Monad m => HttpException -> m (Result a)
 handleHttpErr e = return . ClientError $ "Exception sending HTTP request: " <> showT e
 
-doCall :: Serialize a => Manager -> String -> ByteString -> AuthSettings -> IO (Result a)
-doCall manager path' body auth = (do
+doCall :: Serialize a => Manager -> String -> ByteString -> Int -> AuthSettings -> IO (Result a)
+doCall manager path' body timeout auth = (do
   response <- CLI.callWithCookieJar doCall'
   let status = responseStatus response
   if (status == ok200)
@@ -239,8 +246,8 @@ doCall manager path' body auth = (do
   ) `catch` handleHttpErr
   where decodeError = ClientError . ("Cannot decode return value: " <>) . pack
         serverResult = either (ServerError . pack . displayException) Result . _serverReturn
-        -- 15 * 60 * 1000 * 1000 == 15 minutes in microseconds
-        incTimeout r = r { responseTimeout = responseTimeoutMicro (15 * 60 * 1000 * 1000) }
+        -- timeout * 60 * 1000 * 1000 == (timeout) minutes in microseconds
+        incTimeout r = r { responseTimeout = responseTimeoutMicro (timeout * 60 * 1000 * 1000) }
 
         doCall' cookieJar' = do
           signedRequest <- signRequest auth . addBody =<< parseRequest path'

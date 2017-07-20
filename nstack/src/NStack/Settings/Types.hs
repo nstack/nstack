@@ -1,15 +1,15 @@
 module NStack.Settings.Types where
 import Control.Applicative (empty, (<|>))
-import Control.DeepSeq
 import Control.Lens hiding ((.=))               -- from: lens
 import Control.Monad (mfilter)
 import Control.Monad.Reader (ReaderT(..))       -- from: mtl
 import Data.Aeson                               -- from: aeson
 import Data.Aeson.Types (Parser)                -- from: aeson
 import Data.Coerce
+import Data.Maybe (fromMaybe)
 import Data.String
+import Data.UUID (UUID)
 import Data.Text (Text, toLower)                -- from: text
-import Data.UUID (UUID)                         -- from: uuid
 import GHC.Generics
 
 import NStack.Auth (SecretKey, UserId)
@@ -30,10 +30,6 @@ analyticsSettings = prism' tos (froms . toLower)
         froms "disabled"      = Just AnalyticsDisabled
         froms _               = Nothing
 
-instance FromJSON AnalyticsSettings where
-  parseJSON (String x) = maybe empty pure $ x ^? analyticsSettings
-  parseJSON _          = empty
-
 instance ToJSON AnalyticsSettings where
   toJSON a = String $ a ^. re analyticsSettings
 
@@ -43,16 +39,16 @@ newtype HostName = HostName Text deriving (Eq, Show, IsString)
 instance ToJSON HostName where
   toJSON (HostName a) = coerce (toJSON a)
 
-instance FromJSON HostName where
-  parseJSON a = coerce (parseJSON a :: Parser Text)
-
 -- TODO: version settings files?
 data Settings = Settings { _installId :: Maybe InstallID,
                            _analytics :: Maybe AnalyticsSettings,
                            _authSettings :: Maybe AuthSettings,
                            _authServer :: Maybe HostName,
                            _server :: Maybe ServerDetails,
-                           _frontendHost :: Maybe HostName }
+                           _frontendHost :: Maybe HostName,
+                           _serviceLimits :: Maybe Bool,
+                           _cliTimeout :: Maybe Int
+                           }
   deriving (Eq, Show)
 
 data AuthSettings = NStackHMAC UserId SecretKey
@@ -61,12 +57,6 @@ data AuthSettings = NStackHMAC UserId SecretKey
 
 data ServerDetails = ServerDetails { _hostname :: Maybe HostName,
                                      _port :: Maybe Int } deriving (Eq, Show)
-
-instance NFData AuthSettings
-
-instance FromJSON ServerDetails where
-  parseJSON (Object o) = ServerDetails <$> (o .:? "hostname") <*> (o .:? "port")
-  parseJSON _ = empty
 
 instance ToJSON ServerDetails where
   toJSON (ServerDetails h p) = object ["hostname" .= h,
@@ -85,7 +75,7 @@ instance ToJSON AuthSettings where
                                "secret-key" .= key]
 
 defaultSettings :: Settings
-defaultSettings = Settings { _installId = Nothing, _analytics = Nothing, _authSettings = Nothing, _authServer = Nothing, _server = Nothing, _frontendHost = Nothing }
+defaultSettings = Settings { _installId = Nothing, _analytics = Nothing, _authSettings = Nothing, _authServer = Nothing, _server = Nothing, _frontendHost = Nothing, _serviceLimits = Nothing, _cliTimeout = Nothing }
 
 installId :: Lens' Settings (Maybe InstallID)
 installId f s = (\r -> s { _installId = r }) <$> f (_installId s)
@@ -101,6 +91,12 @@ authServer f s = (\r -> s { _authServer = r }) <$> f (_authServer s)
 
 frontendHost :: Lens' Settings (Maybe HostName)
 frontendHost f s = (\r -> s { _frontendHost = r }) <$> f (_frontendHost s)
+
+serviceLimits :: Lens' Settings Bool -- containers are limited by default
+serviceLimits f s = (\r -> s { _serviceLimits = Just r }) <$> f (fromMaybe True $ _serviceLimits s)
+
+cliTimeout :: Lens' Settings Int
+cliTimeout f s = (\r -> s { _cliTimeout = Just r }) <$> f (fromMaybe 15 $ _cliTimeout s)
 
 authKey :: Lens' AuthSettings SecretKey
 authKey f = \case
@@ -129,10 +125,6 @@ defaultFrontendHost = HostName "http://localhost:8000"
 
 defaultServerDetails :: ServerDetails
 defaultServerDetails = ServerDetails Nothing Nothing
-
-instance FromJSON Settings where
-  parseJSON (Object v) = Settings <$> v .:? "install-id" <*> v .:? "analytics" <*> v .:? "authentication" <*> v .:? "auth-server" <*> v .:? "server" <*> v .:? "frontend-host"
-  parseJSON _          = empty
 
 instance ToJSON Settings where
   toJSON a = object ["analytics"  .= (a ^. analytics),

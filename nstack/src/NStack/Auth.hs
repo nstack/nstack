@@ -1,7 +1,6 @@
 module NStack.Auth where
 
 import Control.Applicative (empty)
-import Control.DeepSeq
 import Control.Lens (Prism', prism', (^.), (^?), re)
 import Control.Monad ((>=>), mfilter)
 import Crypto.Hash (Digest, digestFromByteString, hash)
@@ -36,8 +35,6 @@ newtype UserName = UserName { _username :: Text }
 instance Show UserName where
   show = coerce (show :: Text -> String)
 
-instance NFData UserName
-
 nstackUserName :: UserName
 nstackUserName = UserName "nstack"
 
@@ -47,7 +44,7 @@ instance FromJSON UserName where
   parseJSON a = coerce (parseJSON a :: Parser Text)
 
 newtype UserId = UserId { _userId :: ByteString }
-  deriving (Eq, Ord, Show, IsString, Generic, NFData)
+  deriving (Eq, Ord, Show, IsString, Generic)
 
 instance SafeCopy UserId
 
@@ -78,7 +75,7 @@ instance ToJSON UserId where
   toJSON u = String $ u ^. re hexUserId
 
 newtype SecretKey = SecretKey ByteString
-  deriving (Eq, Show, IsString, NFData)
+  deriving (Eq, Show, IsString)
 
 formatKey :: SecretKey -> Text
 formatKey (SecretKey k) = toBase16 k
