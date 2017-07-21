@@ -13,5 +13,5 @@ extra-deps:
 - mustache-2.1.2
 - tree-view-0.5
 compiler: ghc-8.0.2
-resolver: lts-8.4
+resolver: lts-8.9
 
