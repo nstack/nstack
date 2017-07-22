@@ -1,3 +1,4 @@
+# Custom stack.yaml for nstack-cli
 flags: {}
 packages:
 - nstack-prelude
@@ -7,11 +8,30 @@ packages:
     git: https://github.com/feuerbach/monad-classes.git
     commit: fb93f7ed0b25a7ac1abfe34c73cac87ae9c772d1
   extra-dep: true
+- location:
+    git: https://github.com/Philonous/d-bus.git
+    commit: 35be33648018d3a29cb4f8fec4c912335ed40a10
+  extra-dep: true
+- location:
+    git: https://github.com/feuerbach/megaparsec.git
+    commit: 3688649743914d4dbddcd8f30ea7be76bb25c249
+  extra-dep: true
+- location:
+    git: https://github.com/feuerbach/yaml-combinators.git
+    commit: df2ca0cf92c24d6acd53ffa1f72509bd3aee585e
+  extra-dep: true
 extra-deps:
-- d-bus-0.1.5
+- aeson-1.1.1.0
+- category-printf-0.1.1.0
 - logging-effect-1.1.2
 - mustache-2.1.2
 - tree-view-0.5
+- th-reify-many-0.1.7
+# Workaround for Windows builds: https://github.com/haskell-foundation/foundation/issues/238
+- foundation-0.0.7
+# Dependency of the new megaparsec, not in stackage yet
+- parser-combinators-0.1.0
+# needed for yaml-combinators
+- generics-sop-0.3.1.0
 compiler: ghc-8.0.2
-resolver: lts-8.4
-
+resolver: lts-8.11
