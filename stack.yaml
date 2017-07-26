@@ -16,10 +16,6 @@ packages:
     git: https://github.com/feuerbach/megaparsec.git
     commit: 3688649743914d4dbddcd8f30ea7be76bb25c249
   extra-dep: true
-- location:
-    git: https://github.com/feuerbach/yaml-combinators.git
-    commit: df2ca0cf92c24d6acd53ffa1f72509bd3aee585e
-  extra-dep: true
 extra-deps:
 - aeson-1.1.1.0
 - category-printf-0.1.1.0
@@ -31,6 +27,7 @@ extra-deps:
 - foundation-0.0.7
 # Dependency of the new megaparsec, not in stackage yet
 - parser-combinators-0.1.0
+- yaml-combinators-1.1
 # needed for yaml-combinators
 - generics-sop-0.3.1.0
 compiler: ghc-8.0.2

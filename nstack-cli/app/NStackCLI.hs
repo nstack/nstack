@@ -92,12 +92,12 @@ formatNotebook module_name fn_name = DSLSource $
 
 run :: Command -> CCmd ()
 run (InitCommand initStack mBase gitRepo) = CLI.initCommand initStack mBase gitRepo
-run (StartCommand debug module_name fn_name) = callServer startCommand (formatNotebook module_name fn_name, debug) CLI.showStartMessage
-run (NotebookCommand debug mDsl) = do
+run (StartCommand debugOpt module_name fn_name) = callServer startCommand (formatNotebook module_name fn_name, debugOpt) CLI.showStartMessage
+run (NotebookCommand debugOpt mDsl) = do
   liftInput . HL.outputStrLn $ "NStack Notebook - import modules, write a workflow, and press " <> endStream <> " when finished to start it: "
   dsl <- maybe (liftIO $ DSLSource <$> TIO.getContents) pure mDsl
   liftInput . HL.outputStrLn $ "Building and running NStack Workflow. Please wait. This may take some time."
-  callServer startCommand (dsl, debug) CLI.showStartMessage
+  callServer startCommand (dsl, debugOpt) CLI.showStartMessage
   where endStream = if os == "mingw32" then "<Ctrl-Z>" else "<Ctrl-D>"
 run (StopCommand pId)         = callServer stopCommand pId CLI.showStopMessage
 run (LogsCommand pId)         = callServer logsCommand pId catLogs

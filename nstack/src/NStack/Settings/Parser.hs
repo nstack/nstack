@@ -9,6 +9,7 @@ import qualified Data.UUID as UUID
 import Data.Yaml.Combinators
 
 import NStack.Auth (readUserId, readKey)
+import NStack.Module.Types (DebugOpt(..))
 import NStack.Settings.Types (AnalyticsSettings(..), HostName(..), ServerDetails(..), AuthSettings(..), Settings(..), InstallID(..))
 
 valueWhenMatching :: a -> Parser () -> Parser a
@@ -54,6 +55,12 @@ authSettingsParser = nstackAuthParser <> trustAuthParser
     secretKeyParser = validate string $
       maybe (Left "the secret-key to be a lowercase hexstring with even length") Right . readKey
 
+debugParser :: Parser DebugOpt
+debugParser = trueToDebug <$> bool
+  where
+    trueToDebug True = Debug
+    trueToDebug False = NoDebug
+
 settingsParser :: Parser Settings
 settingsParser = object $ Settings <$>
   optFieldOrNull "install-id" (InstallID <$> uuidParser) <*>
@@ -63,7 +70,8 @@ settingsParser = object $ Settings <$>
   optFieldOrNull "server" serverDetailsParser <*>
   optFieldOrNull "frontend-host" frontendHostParser <*>
   optFieldOrNull "service-limits" bool <*>
-  optFieldOrNull "cli-timeout" integer
+  optFieldOrNull "cli-timeout" integer <*>
+  optFieldOrNull "debug" debugParser
   where
     uuidParser = validate string $
       maybe (Left "install-id to be a valid UUID") Right . UUID.fromText

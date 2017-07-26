@@ -6,7 +6,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Base16
 import Data.Coerce (coerce)
-import Data.SafeCopy (base, deriveSafeCopy, extension, Migrate(..))
+import Data.SafeCopy (base, deriveSafeCopy, extension, Migrate(..), SafeCopy(..), safePut, safeGet, contain)
 import Data.Semigroup
 import Data.Serialize (Serialize(..))
 import Data.Serialize.Get (getListOf)
@@ -161,6 +161,8 @@ instance Serialize FnName where
   put = coerce putText
   get = coerce getText
 
+$(deriveSafeCopy 0 'base ''FnName)
+
 -- | The name of an NStack type
 newtype TyName = TyName Text
   deriving (Eq, Ord, Typeable, Data, IsString, Pretty, Generic, ToJSON)
@@ -185,6 +187,10 @@ instance ToJSON a => ToJSON (Qualified a) where
 
 type QFnName = Qualified FnName
 type QTyName = Qualified TyName
+
+instance SafeCopy QFnName where
+  putCopy (Qualified mod' fn) = contain $ safePut mod' >> safePut fn
+  getCopy = contain $ Qualified <$> safeGet <*> safeGet
 
 instance Show a => Show (Qualified a) where
   show (Qualified modName methName) = pprS modName <> "." <> show methName

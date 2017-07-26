@@ -2,10 +2,12 @@ module NStack.Prelude.Exception
   ( TransientError(..)
   , PermanentError(..)
   , throwPermanentError
+  , throwPermanentErrorT
   )
   where
 
 import Control.Exception
+import Data.Text (unpack, Text)
 import Data.Typeable (Typeable)
 import Control.Monad.IO.Class (MonadIO(..))
 
@@ -24,3 +26,6 @@ instance Exception PermanentError where
 -- | A shortcut for commonly-occurring @liftIO . throwIO . PermanentError@.
 throwPermanentError :: MonadIO m => String -> m a
 throwPermanentError = liftIO . throwIO . PermanentError
+
+throwPermanentErrorT :: MonadIO m => Text -> m a
+throwPermanentErrorT = throwPermanentError . unpack

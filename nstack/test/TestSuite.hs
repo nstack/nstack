@@ -19,7 +19,7 @@ main = defaultMainWithIngredients (antXMLRunner:defaultIngredients) $ testGroup 
 settingsParserTests :: TestTree
 settingsParserTests = testGroup "Unit Tests"
   [ testCase "Display a proper error message when invalid analytics settings" $
-      checkErrorMessages "test/res/invalid-analytics-settings.conf" "Expected \"enabled\", \"disabled\" instead of",
+      checkErrorMessages "test/res/invalid-analytics-settings.conf" "Expected \"disabled\", \"enabled\" instead of",
     testCase "Display a proper error message when invalid install-id" $
       checkErrorMessages "test/res/invalid-install-id.conf" "Expected install-id to be a valid UUID instead of",
     testCase "Display a proper error message when invalid server" $
@@ -29,7 +29,7 @@ settingsParserTests = testGroup "Unit Tests"
       checkErrorMessages "test/res/invalid-authentication1.conf" "Unexpected \n\nuser-id: abc123",
 
     testCase "Display a proper error message when more arguments for nstack scheme are needed" $
-      checkErrorMessages "test/res/invalid-authentication2.conf" "Expected \"trust\" instead of:",
+      checkErrorMessages "test/res/invalid-authentication2.conf" "Expected field \"user-id\" as part of:",
 
     testCase "Display a proper error message when invalid authentication scheme is used" $
       checkErrorMessages "test/res/invalid-authentication3.conf" "Expected \"nstack\", \"trust\" instead of:",
@@ -74,5 +74,6 @@ parseSettingsFileTest = do
         (Just (HostName "https://demo-register.nstack.com:8443"))
         (Just (ServerDetails (Just $ HostName "examplehost.com") (Just 3000)))
         (Just (HostName "http://localhost:8000"))
+        Nothing
         Nothing
         Nothing

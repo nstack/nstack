@@ -12,6 +12,7 @@ import Data.UUID (UUID)
 import Data.Text (Text, toLower)                -- from: text
 import GHC.Generics
 
+import NStack.Module.Types (DebugOpt(NoDebug))
 import NStack.Auth (SecretKey, UserId)
 
 newtype InstallID = InstallID UUID deriving (Eq, Show, ToJSON, FromJSON)
@@ -47,7 +48,8 @@ data Settings = Settings { _installId :: Maybe InstallID,
                            _server :: Maybe ServerDetails,
                            _frontendHost :: Maybe HostName,
                            _serviceLimits :: Maybe Bool,
-                           _cliTimeout :: Maybe Int
+                           _cliTimeout :: Maybe Int,
+                           _debug :: Maybe DebugOpt
                            }
   deriving (Eq, Show)
 
@@ -75,7 +77,7 @@ instance ToJSON AuthSettings where
                                "secret-key" .= key]
 
 defaultSettings :: Settings
-defaultSettings = Settings { _installId = Nothing, _analytics = Nothing, _authSettings = Nothing, _authServer = Nothing, _server = Nothing, _frontendHost = Nothing, _serviceLimits = Nothing, _cliTimeout = Nothing }
+defaultSettings = Settings { _installId = Nothing, _analytics = Nothing, _authSettings = Nothing, _authServer = Nothing, _server = Nothing, _frontendHost = Nothing, _serviceLimits = Nothing, _cliTimeout = Nothing, _debug = Nothing }
 
 installId :: Lens' Settings (Maybe InstallID)
 installId f s = (\r -> s { _installId = r }) <$> f (_installId s)
@@ -97,6 +99,9 @@ serviceLimits f s = (\r -> s { _serviceLimits = Just r }) <$> f (fromMaybe True 
 
 cliTimeout :: Lens' Settings Int
 cliTimeout f s = (\r -> s { _cliTimeout = Just r }) <$> f (fromMaybe 15 $ _cliTimeout s)
+
+debug :: Lens' Settings DebugOpt
+debug f s = (\r -> s { _debug = Just r }) <$> f (fromMaybe NoDebug $ _debug s)
 
 authKey :: Lens' AuthSettings SecretKey
 authKey f = \case
