@@ -7,20 +7,20 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Base16
 import Data.Coerce (coerce)
 import Data.SafeCopy (base, deriveSafeCopy, extension, Migrate(..), SafeCopy(..), safePut, safeGet, contain)
-import Data.Semigroup
+import Data.Monoid ((<>))
 import Data.Serialize (Serialize(..))
 import Data.Serialize.Get (getListOf)
 import Data.Serialize.Put (putListOf)
 import Data.String (IsString)
 import Data.Text (Text)                        -- from: text
 import qualified Data.Text as T                -- from: text
-import Data.Aeson (ToJSON(..))
+import Data.Aeson (ToJSON(..), FromJSON(..), ToJSONKey, FromJSONKey)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Typeable (Typeable)
 import Data.Data (Data(..))
 import Data.UUID (UUID)
 import GHC.Generics (Generic)
-import Text.PrettyPrint.Mainland (Pretty, ppr, text, commasep)   -- from: mainland-pretty
+import Text.PrettyPrint.Mainland (Pretty, ppr, text, commasep, char, integer)   -- from: mainland-pretty
 import Text.Printf (printf)
 
 import NStack.Auth (UserName(..), nstackUserName)
@@ -28,23 +28,31 @@ import NStack.SafeCopyOrphans ()
 import NStack.UUIDOrphans ()
 import NStack.Prelude.Text (showT, putText, getText, pprS)
 
+type APIVersion = Integer
 
-data Stack = Python | Python2 | NodeJS
-  -- Custom Text  -- TODO - add a Custom Stack that reads config from a YAML file at build-time
-  deriving (Show, Eq, Generic)
+data Language = Python | Python2 | NodeJS | Haskell | R
+  deriving (Show, Eq, Ord, Generic)
+
+data Stack = Stack Language APIVersion
+  deriving (Show, Eq, Ord, Generic)
+
+instance Serialize Language
+$(deriveSafeCopy 0 'base ''Language)
 
 instance Serialize Stack
 $(deriveSafeCopy 0 'base ''Stack)
 
-instance Pretty Stack where
+instance Pretty Language where
   ppr = text . show
 
--- System stacks
-stacks :: [Stack]
-stacks = [Python, Python2, NodeJS]
+instance Pretty Stack where
+  ppr (Stack l v) = ppr l <> char '-' <> integer v
 
 newtype NSUri = NSUri { _nsUri :: [Text] }
   deriving (Eq, Ord, Typeable, Data, Generic)
+
+instance ToJSON NSUri
+instance FromJSON NSUri
 
 instance Show NSUri where
   show = T.unpack . T.intercalate "." . _nsUri
@@ -68,6 +76,9 @@ data Version_v1 = Version_v1 Integer Integer Integer Bool
 data Release = Snapshot | Release
   deriving (Eq, Ord, Show, Generic, Typeable, Data)
 
+instance ToJSON Release
+instance FromJSON Release
+
 -- TODO add version helper funcs that support semver?
 data Version = Version {
   _majorVer :: Integer,
@@ -75,6 +86,9 @@ data Version = Version {
   _patchVer :: Integer,
   _release  :: Release
 } deriving (Eq, Ord, Generic, Typeable, Data)
+
+instance ToJSON Version
+instance FromJSON Version
 
 instance Migrate Version_v1 where
   type MigrateFrom Version_v1 = Version_v0
@@ -105,24 +119,22 @@ data ModuleName = ModuleName {
   _mVersion :: Version
 } deriving (Show, Eq, Ord, Generic, Typeable, Data)
 
--- | Used by IDLJSONWriter
-instance ToJSON ModuleName where
-  toJSON = toJSON . pprS
-
 instance Pretty ModuleName where
   ppr = text . showShortModuleName
-
-sameNSName :: ModuleName -> ModuleName -> Bool
-sameNSName (ModuleName r a n _) (ModuleName r' a' n' _) = r == r' && a == a' && n == n'
-
-ordByVersion :: ModuleName -> ModuleName -> Ordering
-ordByVersion m@(ModuleName _ _ _ v) m'@(ModuleName _ _ _ v') = if sameNSName m m' then compare v v' else EQ
 
 nStackRegistry :: NSUri
 nStackRegistry = NSUri ["registry", "nstack", "com"]
 
+-- | Helper function to create a ModuleName using the default registry/author
 mkNStackModuleName :: NSUri -> Version -> ModuleName
 mkNStackModuleName = ModuleName nStackRegistry nstackUserName
+
+type FedoraVersion = Integer
+type FedoraSnapshot = Integer
+
+-- | Make an NStack module name used internally for base images by the system
+mkBaseModuleName :: Text -> APIVersion -> FedoraVersion -> FedoraSnapshot -> ModuleName
+mkBaseModuleName s v majS minS = mkNStackModuleName (NSUri ["NStack", s]) (Version majS minS v Release)
 
 -- | display the module name, hiding registry and author if they are the default
 showShortModuleName :: ModuleName -> String
@@ -152,7 +164,7 @@ instance Migrate ModuleName where
 
 -- | The name of an NStack function
 newtype FnName = FnName Text
-  deriving (Eq, Ord, Typeable, IsString, Pretty, Generic, ToJSON, Data)
+  deriving (Eq, Ord, Typeable, IsString, Pretty, Generic, ToJSON, FromJSON, ToJSONKey, FromJSONKey, Data)
 
 instance Show FnName where
   show = coerce T.unpack
@@ -165,7 +177,7 @@ $(deriveSafeCopy 0 'base ''FnName)
 
 -- | The name of an NStack type
 newtype TyName = TyName Text
-  deriving (Eq, Ord, Typeable, Data, IsString, Pretty, Generic, ToJSON)
+  deriving (Eq, Ord, Typeable, Data, IsString, Pretty, Generic, ToJSON, FromJSON, ToJSONKey, FromJSONKey)
 
 instance Show TyName where
   show = coerce T.unpack
@@ -180,10 +192,6 @@ data Qualified a = Qualified
   , _unqualName :: a
   }
   deriving (Eq, Ord, Typeable, Generic, Data)
-
--- | Used by IDLJSONWriter
-instance ToJSON a => ToJSON (Qualified a) where
-  toJSON (Qualified m n) = toJSON (m, n)
 
 type QFnName = Qualified FnName
 type QTyName = Qualified TyName
@@ -251,6 +259,11 @@ instance Monoid DebugOpt where
   Debug   `mappend` _ = Debug
 
 instance Serialize DebugOpt
+
+instance ToJSON DebugOpt where
+  toJSON Debug = toJSON True
+  toJSON NoDebug = toJSON False
+
 
 class HasDebugOpt a where
   debugOpt :: Lens' a DebugOpt

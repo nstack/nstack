@@ -38,8 +38,7 @@ import qualified Network.WebSockets as WS
 import NStack.CLI.Auth (signRequest, allowSelfSigned)
 import NStack.CLI.Parser (cmds)
 import NStack.CLI.Types
-import NStack.CLI.Commands
-import qualified NStack.CLI.Commands as CLI
+import NStack.CLI.Commands as CLI
 import NStack.Common.Environment (httpApiPort)
 import NStack.Comms.Types
 import NStack.Comms.ApiHashValue (apiHashValue)
@@ -91,7 +90,7 @@ formatNotebook module_name fn_name = DSLSource $
 
 
 run :: Command -> CCmd ()
-run (InitCommand initStack mBase gitRepo) = CLI.initCommand initStack mBase gitRepo
+run (InitCommand initStack gitRepo) = CLI.initCommand initStack gitRepo
 run (StartCommand debugOpt module_name fn_name) = callServer startCommand (formatNotebook module_name fn_name, debugOpt) CLI.showStartMessage
 run (NotebookCommand debugOpt mDsl) = do
   liftInput . HL.outputStrLn $ "NStack Notebook - import modules, write a workflow, and press " <> endStream <> " when finished to start it: "
@@ -99,16 +98,19 @@ run (NotebookCommand debugOpt mDsl) = do
   liftInput . HL.outputStrLn $ "Building and running NStack Workflow. Please wait. This may take some time."
   callServer startCommand (dsl, debugOpt) CLI.showStartMessage
   where endStream = if os == "mingw32" then "<Ctrl-Z>" else "<Ctrl-D>"
-run (StopCommand pId)         = callServer stopCommand pId CLI.showStopMessage
-run (LogsCommand pId)         = callServer logsCommand pId catLogs
-run ServerLogsCommand         = callServer serverLogsCommand () catLogs
-run (InfoCommand fAll)        = callServer infoCommand fAll CLI.printInfo
-run (ListCommand mType fAll)  = callServer listCommand (mType, fAll) CLI.printMethods
-run (ListModulesCommand fAll) = callServer listModulesCommand fAll (`prettyLinesOr` "No registered images")
-run (DeleteModuleCommand m)   = callServer deleteModuleCommand m (const $ "Module deleted: " <> pprT m)
-run (ListProcessesCommand)    = callServer listProcessesCommand () CLI.printProcesses
-run (GarbageCollectCommand)   = callServer gcCommand () (`prettyLinesOr` "Nothing removed")
-run (ConnectCommand pId)      = connectStdInOut pId
+
+run (StopCommand pId)                = callServer stopCommand pId CLI.showStopMessage
+run (LogsCommand pId)                = callServer logsCommand pId catLogs
+run ServerLogsCommand                = callServer serverLogsCommand () catLogs
+run (InfoCommand fAll)               = callServer infoCommand fAll CLI.printInfo
+run (ListCommand mType fAll)         = callServer listCommand (mType, fAll) CLI.printMethods
+run (ListModulesCommand fAll)        = callServer listModulesCommand fAll (`prettyLinesOr` "No registered images")
+run (DeleteModuleCommand m)          = callServer deleteModuleCommand m (const $ "Module deleted: " <> pprT m)
+run ListProcessesCommand             = callServer listProcessesCommand () CLI.printProcesses
+run (ListStoppedCommand mStart mEnd) = callServer listStoppedCommand (mStart, mEnd) CLI.printProcesses
+run GarbageCollectCommand            = callServer gcCommand () (`prettyLinesOr` "Nothing removed")
+run ListScheduled                    = callServer listScheduledCommand () CLI.printScheduledProcesses
+run (ConnectCommand pId)             = connectStdInOut pId
 run (BuildCommand dropBadModules) =
   ifM (R.testfile projectFile) projectBuild
     (ifM (R.testfile configFile ||^ R.testfile workflowFile) workflowModule
@@ -130,7 +132,7 @@ run (TestCommand mod' fn snippet) = do
   path' <- liftIO randomPath
   (Transport t) <- ask
   r <- t testCommand ((Qualified mod' fn), HttpPath path')
-  (ProcessInfo pId _ _) <- case r of
+  (ProcessInfo pId _ _ _) <- case r of
               (ServerError e) -> throwError $ unpack e
               (ClientError e)-> throwError $ unpack e
               (Result v) -> return v
@@ -228,7 +230,7 @@ serverPath = do
 callWithHttp :: CCmdEff m => Manager -> String -> ApiCall a b -> a -> m (Result b)
 callWithHttp manager hostname (ApiCall name) args = do
   auth <- (^. authSettings) <$> settings
-  timeout <- (^. cliTimeout) <$> settings
+  timeout <- getCliTimeout <$> settings
   liftIO $ maybe (return err) (doCall manager path' (encode args) timeout) auth
     where path' = hostname <> unpack name
           err = ClientError "Missing or invalid credentials. Please run the 'nstack set-server' command as described in your email."

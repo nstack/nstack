@@ -2,8 +2,7 @@
 name: {{ name }}
 
 # Parent Image
-parent: {{ parent }}
-
+{{ stackOrParent }}
 # (Optional) System-level packages needed
 packages: []
 

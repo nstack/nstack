@@ -3,18 +3,18 @@
 
 module NStack.Comms.Types (module NStack.Comms.Types) where
 
+import Control.Lens (makeLenses, Lens', Iso')
 import Data.ByteString (ByteString)  -- from: bytestring
 import Data.Coerce (coerce)
 import qualified Data.Map as Map
 import Data.Monoid ((<>))
-import Data.SafeCopy (deriveSafeCopy, base, contain, SafeCopy(..), safePut, safeGet)
-import Data.Serialize (Serialize(..), putTwoOf, getTwoOf)
+import Data.SafeCopy (deriveSafeCopy, base, SafeCopy(..))
+import Data.Serialize (Serialize(..))
 import Data.Serialize.Text () -- Serialize Text instances
 import Data.String (IsString)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Thyme (UTCTime)
-import Data.Thyme.Time (fromThyme, toThyme)
 import Data.Typeable (Typeable)
 import qualified Data.Loc as Loc
 import Data.UUID (UUID)
@@ -23,48 +23,88 @@ import Text.PrettyPrint.Mainland (Pretty(..), text, spaces, align, stack)
 import Language.Haskell.TH (Name)
 import Control.Exception(Exception(..))
 
+import NStack.Comms.TypeRepresentation
 import NStack.Module.Types (DebugOpt, ModuleName, QFnName, Stack, Image(..), Qualified)
 import NStack.Prelude.Text (putText, getText)
 import NStack.Prelude.Time (timeToUnix, timeFromUnix)
 
 -- general newtypes used from client/server comms
 
-newtype StartTime = StartTime UTCTime
+newtype BookendTime = BookendTime { _bookendTime :: UTCTime }
   deriving (Eq, Ord)
+
+newtype StartTime = StartTime { _startBookend :: BookendTime }
+  deriving (Eq, Ord, Serialize, Pretty)
+
+newtype StopTime = StopTime { _stopBookend :: BookendTime }
+  deriving (Eq, Ord, Serialize, Pretty)
+
+instance Show BookendTime where
+  show (BookendTime t) = show t
+
+instance Show StopTime where
+  show (StopTime t) = show t
 
 instance Show StartTime where
   show (StartTime t) = show t
 
-instance Pretty StartTime where
+instance Pretty BookendTime where
   ppr = text . show
 
-instance Serialize StartTime where
-  put (StartTime t) = put $ timeToUnix t
+instance Serialize BookendTime where
+  put (BookendTime t) = put $ timeToUnix t
   get = do
     s <- get
     maybe (fail "Could not parse date string") return $ timeM s
-      where timeM = fmap StartTime . timeFromUnix
+      where timeM = fmap BookendTime . timeFromUnix
 
-instance SafeCopy StartTime where
-  putCopy (StartTime t) = contain . safePut $ fromThyme t
-  getCopy = contain $ StartTime . toThyme <$> safeGet
+instance Serialize UTCTime where
+  put t = put $ timeToUnix t
+  get = do
+    s <- get
+    maybe (fail "Could not parse date string") return $ timeFromUnix s
+
+instance SafeCopy StartTime
+
+instance SafeCopy BookendTime
+
+instance SafeCopy StopTime
+
+instance Pretty UTCTime where
+  ppr = text . show
+
+
 
 newtype ProcessId = ProcessId Text
   deriving (Eq, Pretty, Ord, Generic)
 
+newtype StoppedFrom = StoppedFrom Int
+  deriving (Serialize, Num, Eq, Show, Ord)
+
+newtype StoppedAmount = StoppedAmount Int
+  deriving (Serialize, Num)
+
+processIdText :: Lens' ProcessId Text
+processIdText f (ProcessId t) = ProcessId <$> f t
+
 newtype GitRepo = GitRepo { _gitRepo :: Bool }
   deriving (Eq)
 
-data ProcessInfo = ProcessInfo
+data ProcessInfo a = ProcessInfo
   { _processId :: ProcessId
   , _timestamp :: StartTime
-  , _command :: Text
-  } deriving (Eq, Ord, Show, Generic)
+  , _dslCommand :: Text
+  , _stopTime :: a
+  } deriving (Eq, Ord, Show, Functor, Generic, Foldable, Traversable)
 
-instance Pretty ProcessInfo where
-  ppr (ProcessInfo (ProcessId p) t c) =  ppr p <> spaces 5 <> ppr t <> spaces 2 <> align (stack $ ppr <$> T.lines c)
+instance Pretty (ProcessInfo ()) where
+  ppr (ProcessInfo (ProcessId p) t c _) =  ppr p <> spaces 5 <> ppr t <> spaces 2 <> align (stack $ ppr <$> T.lines c)
+
+instance Pretty (ProcessInfo StopTime) where
+  ppr (ProcessInfo (ProcessId p) t c stop) =  ppr p <> spaces 5 <> ppr t <> spaces 2 <> ppr stop <> spaces 2 <> align (stack $ ppr <$> T.lines c)
 
 newtype ContainerId = ContainerId { _containerId :: Text } -- systemd dbus object path
+  deriving (Serialize)
 newtype BuildTarball = BuildTarball { _buildTarball :: ByteString }
 newtype WorkflowSrc = WorkflowSrc { _workflowSrc :: Text }
 newtype LogsLine = LogsLine { _logLine :: Text }
@@ -76,14 +116,21 @@ data TypeSignature
   | TypeDefinition Text
     -- ^ the 'QFnName' is a type with this definition
   deriving (Show, Generic, Eq)
+
+-- Maybe acknowledges that not all nstack methods have a proper
+-- 'MTypeRepresentation'. Only monomorphic methods do.
+data MethodInfo = MethodInfo TypeSignature (Maybe MTypeRepresentation)
+  deriving (Show, Eq, Generic)
+
 newtype DSLSource = DSLSource { _src :: Text }
   deriving (Eq, Ord, Typeable, IsString)
 
 -- | Simplified nstack-server info for sending to the CLI
 data ServerInfo = ServerInfo {
-  _processes  :: [ProcessInfo],
-  _methods    :: Map.Map QFnName TypeSignature,
-  _modules    :: Map.Map ModuleName ModuleInfo }
+  _siProcesses  :: [ProcessInfo ()],
+  _siStopped    :: [ProcessInfo StopTime],
+  _siMethods    :: Map.Map QFnName MethodInfo,
+  _siModules    :: Map.Map ModuleName ModuleInfo }
   deriving (Eq, Show, Generic)
 
 -- | Simplified module info for sending to the CLI
@@ -131,9 +178,7 @@ instance Serialize ProcessId where
   put = coerce putText
   get = coerce getText
 
-instance Serialize ProcessInfo where
-  put (ProcessInfo pId t c) = putTwoOf put (putTwoOf put putText) (pId, (t, c))
-  get = (\(p, (t, c)) -> ProcessInfo p t c) <$> getTwoOf get (getTwoOf get getText)
+instance Serialize a => Serialize (ProcessInfo a)
 
 instance Serialize WorkflowSrc where
   put = coerce putText
@@ -144,6 +189,7 @@ instance Serialize LogsLine where
   get = coerce getText
 
 instance Serialize TypeSignature
+instance Serialize MethodInfo
 
 instance Serialize DSLSource where
   put = coerce putText
@@ -221,10 +267,10 @@ instance Serialize Loc.Pos
 data ApiCall a b where
   ApiCall :: (Serialize a, Serialize b) => Text -> ApiCall a b
 
-startCommand :: ApiCall (DSLSource, DebugOpt) ProcessInfo
+startCommand :: ApiCall (DSLSource, DebugOpt) (ProcessInfo ())
 startCommand = ApiCall "StartCommand"
 
-stopCommand :: ApiCall ProcessId ProcessId
+stopCommand :: ApiCall ProcessId (ProcessInfo StopTime)
 stopCommand = ApiCall "StopCommand"
 
 logsCommand :: ApiCall ProcessId [LogsLine]
@@ -240,14 +286,20 @@ infoCommand = ApiCall "InfoCommand"
 listCommand :: ApiCall (Maybe EntityType, Bool) [(Qualified Text, TypeSignature)]
 listCommand = ApiCall "ListCommand"
 
+listScheduledCommand :: ApiCall () [(ProcessInfo (), [UTCTime])]
+listScheduledCommand = ApiCall "ListScheduledCommand"
+
 listModulesCommand :: ApiCall Bool [ModuleName]
 listModulesCommand = ApiCall "ListModulesCommand"
 
 deleteModuleCommand :: ApiCall ModuleName ()
 deleteModuleCommand = ApiCall "DeleteModuleCommand"
 
-listProcessesCommand :: ApiCall () [ProcessInfo]
+listProcessesCommand :: ApiCall () [ProcessInfo ()]
 listProcessesCommand = ApiCall "ListProcessesCommand"
+
+listStoppedCommand :: ApiCall (Maybe StoppedFrom, Maybe StoppedAmount) [ProcessInfo StopTime]
+listStoppedCommand = ApiCall "ListStoppedCommand"
 
 gcCommand :: ApiCall () [UUID]
 gcCommand = ApiCall "GarbageCollectCommand"
@@ -258,8 +310,20 @@ buildCommand = ApiCall "BuildCommand"
 buildFrontendCommand :: ApiCall (ContainerData, DropBadModules) ModuleName
 buildFrontendCommand = ApiCall "BuildFrontendCommand"
 
-testCommand :: ApiCall (QFnName, HttpPath) ProcessInfo
+testCommand :: ApiCall (QFnName, HttpPath) (ProcessInfo ())
 testCommand = ApiCall "TestCommand"
+
+$(makeLenses ''ServerInfo)
+$(makeLenses ''ProcessInfo)
+$(makeLenses ''BookendTime)
+$(makeLenses ''StartTime)
+$(makeLenses ''StopTime)
+
+stopToTime :: Iso' StopTime UTCTime
+stopToTime = stopBookend.bookendTime
+
+startTime :: Iso' StartTime UTCTime
+startTime = startBookend.bookendTime
 
 -- | List all supported API calls.
 --
@@ -275,6 +339,8 @@ allApiCalls =
   , 'listCommand
   , 'listModulesCommand
   , 'listProcessesCommand
+  , 'listStoppedCommand
+  , 'listScheduledCommand
   , 'logsCommand
   , 'serverLogsCommand
   , 'startCommand

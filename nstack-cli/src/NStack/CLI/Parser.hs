@@ -2,22 +2,20 @@ module NStack.CLI.Parser (
   cmds
 ) where
 import Control.Lens ((^?))
-import Control.Monad.Except (MonadError, runExcept)
+import Control.Monad.Except (runExcept)
 import Data.Monoid ((<>))
 import Data.String
-import Data.Text (Text, pack)
-import Text.Megaparsec (try, (<?>))    -- from: megaparsec
-import Text.Megaparsec.Char (string)    -- from: megaparsec
+import Data.Text (pack)
+import Options.Applicative       -- optparse-applicative
+import Text.Megaparsec (try)    -- from: megaparsec
 
 import NStack.Auth (hexUserId, textSecretKey, UserName(..), validEmail)
 import NStack.CLI.Commands (Command(..), InitStack(..))
 import NStack.Comms.Types
-import NStack.Module.Parser (pStack, inlineParser)
+import NStack.Module.Parser (pLanguage, inlineParser, parseModuleName)
 import NStack.Module.Types (DebugOpt(..), BaseImage(..), ModuleName(..), FnName(..))
-import NStack.Module.Parser (parseModuleName)
 import NStack.Prelude.Monad (maybeToRight)
 
-import Options.Applicative       -- optparse-applicative
 
 -- Combinators
 pModuleName :: Parser ModuleName
@@ -32,6 +30,14 @@ pFnName = (FnName . pack) <$> strArgument (metavar "function_name" <> help "Func
 pDSL :: Parser DSLSource
 pDSL = DSLSource . pack <$> argument str (metavar "code" <> help "DSL code. If omitted, will be read from standard input.")
 
+pStartPoint :: Parser StoppedFrom
+pStartPoint = StoppedFrom <$> argument auto (metavar "from" <>
+                                            help "Where to start in the stopped processes. If omitted, will default to 0.")
+
+pAmount :: Parser StoppedAmount
+pAmount = StoppedAmount <$> argument auto (metavar "n" <>
+                                            help "How many stopped processses to display. If omitted, will default to 10.")
+
 pProcessId :: Parser ProcessId
 pProcessId = ProcessId . pack <$> argument str (metavar "process" <> help "Process Id")
 
@@ -45,6 +51,10 @@ startOpts =  StartCommand <$> debugFlag <*> pModuleName <*> pFnName
 -- | Parser for Notebook command options
 notebookOpts :: Parser Command
 notebookOpts =  NotebookCommand <$> debugFlag <*> optional pDSL
+
+-- | Parser for Stopped command options
+stoppedOpts :: Parser Command
+stoppedOpts = ListStoppedCommand <$> optional pStartPoint <*> optional pAmount
 
 debugFlag :: Parser DebugOpt
 debugFlag = flag NoDebug Debug (long "debug" <> help "enable debug logging")
@@ -62,21 +72,26 @@ connectOpts = ConnectCommand <$> pProcessId
 
 -- Parser for Init command options
 
-pInitStack :: MonadError String m => Text -> m InitStack
-pInitStack = inlineParser $ try (pW <|> pF <|> pS)
-  where
-    pW = InitWorkflow <$ string "workflow" <?> "workflow"
-    pF = InitFramework <$ string "framework" <?> "framework"
-    pS = InitStack <$> pStack <?> "a valid stack"
+-- pInitStack :: MonadError String m => Text -> m InitStack
+-- pInitStack = inlineParser $ try (pW <|> pS <|> pF)
+--   where
+--     pW = InitWorkflow <$ string "workflow" <?> "workflow"
+--     pF = InitFramework <$ string "framework" <?> "framework"
+--     pS = InitStack <$> pLanguage <?> "a valid stack"
 
 initOpts :: Parser Command
 initOpts =  InitCommand
-            <$> argument pInitStack' (metavar "stack" <> help "Module Stack")
-            <*> optional (BaseImage . pack <$> argument str (metavar "base-image" <> help "Base Image to use (e.g. NStack.Python:0.24.0"))
-            <*> (GitRepo <$> switch (long "git-repo" <> help "Initialise Git Repository"))
+            <$> pInit
+            <*> (GitRepo <$> switch (long "git-repo" <> help "Initialise with a git repository"))
   where
-    pInitStack' :: ReadM InitStack
-    pInitStack' = eitherReader (runExcept . pInitStack . pack)
+    pInit :: Parser InitStack
+    pInit = pWorkflow <|> option pInitStack (short 'l' <> long "language" <> metavar "LANGUAGE" <> help "Initialise a module in the given language") <|> pFramework
+
+    pInitStack :: ReadM InitStack
+    pInitStack = eitherReader (runExcept . inlineParser (try $ InitStack <$> pLanguage) . pack)
+
+    pWorkflow = flag' InitWorkflow (short 'w' <> long "workflow" <> help "Initialise a new workflow")
+    pFramework = InitFramework . BaseImage . pack <$> strOption (short 'f' <> long "framework" <> metavar "MODULENAME" <> help "Initialise a module inheriting from the given parent framework (e.g. NStack.BigQuery:0.3.0)")
 
 -- | Parser for the register command options
 regOpts :: Parser Command
@@ -84,11 +99,11 @@ regOpts = RegisterCommand <$> (UserName . pack <$> argument str (metavar "userna
                           <*> argument pEmail (metavar "email" <> help "Email to register with")
                           <*> serverFlag
   where
-    pEmail = eitherReader $ (\x -> maybeToRight "Not a valid email address" (pack x ^? validEmail))
+    pEmail = eitherReader (\x -> maybeToRight "Not a valid email address" (pack x ^? validEmail))
     serverFlag = option str (long "server" <> short 's' <> help "NStack Registry Server" <> showDefault <> value "demo-register.nstack.com:8443" <> metavar "SERVER")
 
 sendOpts :: Parser Command
-sendOpts = SendCommand <$> (argument str (metavar "path" <> help "Path the source was created on"))
+sendOpts = SendCommand <$> argument str (metavar "path" <> help "Path the source was created on")
                        <*> argument str (metavar "event" <> help "JSON Snippet to send as an event")
 
 testOpts :: Parser Command
@@ -126,12 +141,14 @@ cmds :: Parser Command
 cmds =  hsubparser ( command "info" (info (InfoCommand <$> allSwitch) (progDesc "Show the server status"))
                 <>  command "init" (info initOpts (progDesc "Initialise a new module/workflow"))
                 <>  command "list" (info (helper <*> listOpts) (progDesc "List registered modules or functions"))
+                <>  command "list-scheduled" (info (pure ListScheduled) (progDesc "List scheduled processes"))
                 <>  command "build" (info buildOpts (progDesc "Build module"))
                 <>  command "delete" (info (DeleteModuleCommand <$> pModuleName) (progDesc "Delete a module"))
                 <>  command "start" (info startOpts (progDesc "Start a workflow"))
                 <>  command "notebook" (info notebookOpts (progDesc "Enter some DSL interactively"))
                 <>  command "stop" (info stopOpts (progDesc "Stop a process"))
                 <>  command "ps" (info (pure ListProcessesCommand) (progDesc "List all running processes"))
+                <>  command "stopped" (info stoppedOpts (progDesc "List all stopped processes"))
                 <>  command "logs" (info logsOpts (progDesc "Show the logs of a running process"))
                 <>  command "connect" (info connectOpts (progDesc "Connect stdin/stdout to a process"))
                 <>  command "server-logs" (info (pure ServerLogsCommand) (progDesc "Show the nstack server's logs"))

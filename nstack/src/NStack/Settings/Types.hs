@@ -94,11 +94,20 @@ authServer f s = (\r -> s { _authServer = r }) <$> f (_authServer s)
 frontendHost :: Lens' Settings (Maybe HostName)
 frontendHost f s = (\r -> s { _frontendHost = r }) <$> f (_frontendHost s)
 
-serviceLimits :: Lens' Settings Bool -- containers are limited by default
-serviceLimits f s = (\r -> s { _serviceLimits = Just r }) <$> f (fromMaybe True $ _serviceLimits s)
+serviceLimits :: Lens' Settings (Maybe Bool)
+serviceLimits f s = (\r -> s { _serviceLimits = r }) <$> f (_serviceLimits s)
 
-cliTimeout :: Lens' Settings Int
-cliTimeout f s = (\r -> s { _cliTimeout = Just r }) <$> f (fromMaybe 15 $ _cliTimeout s)
+getOrDefault :: Lens' Settings (Maybe a) -> a -> Settings -> a
+getOrDefault someLens someDefault s = fromMaybe someDefault (s ^. someLens)
+
+getServiceLimits :: Settings -> Bool
+getServiceLimits = getOrDefault serviceLimits True
+
+cliTimeout :: Lens' Settings (Maybe Int)
+cliTimeout f s = (\r -> s { _cliTimeout = r }) <$> f(_cliTimeout s)
+
+getCliTimeout :: Settings -> Int
+getCliTimeout = getOrDefault cliTimeout 15
 
 debug :: Lens' Settings DebugOpt
 debug f s = (\r -> s { _debug = Just r }) <$> f (fromMaybe NoDebug $ _debug s)
@@ -137,7 +146,11 @@ instance ToJSON Settings where
                      "authentication" .= (a ^. authSettings),
                      "server" .= (a ^. serverConn),
                      "auth-server" .= (a ^. authServer),
-                     "frontend-host" .= (a ^. frontendHost)]
+                     "frontend-host" .= (a ^. frontendHost),
+                     "debug" .= (a ^. debug),
+                     "cli-timeout" .= (a ^. cliTimeout),
+                     "service-limits" .= (a ^. serviceLimits) ]
+
 
 class MonadSettings m where
   settings :: m Settings

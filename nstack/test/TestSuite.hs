@@ -1,15 +1,18 @@
 import Control.Monad (unless)
 import qualified Data.ByteString as BS
+import Data.ByteString.Lazy (toStrict)
 import Data.List (isInfixOf)
-
+import Data.Aeson
 
 import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.Runners (defaultMainWithIngredients)
 import Test.Tasty.Runners.AntXML
 
+import NStack.Module.Types
 import NStack.Settings
 import NStack.Auth (readKey, readUserId)
+
 
 main :: IO ()
 main = defaultMainWithIngredients (antXMLRunner:defaultIngredients) $ testGroup "Tests" [
@@ -40,7 +43,10 @@ settingsParserTests = testGroup "Unit Tests"
       checkErrorMessages "test/res/invalid-frontend-host.conf" "Expected frontend-host url not to contain a trailing slash",
 
     testCase "Parse a settings file"
-      parseSettingsFileTest
+      parseSettingsFileTest,
+
+    testCase "Serializing and then deserializing is the identity" $
+      serializeDeserialize completeSettingsSample
   ]
 
 checkErrorMessages :: FilePath -> String -> IO ()
@@ -77,3 +83,23 @@ parseSettingsFileTest = do
         Nothing
         Nothing
         Nothing
+
+completeSettingsSample :: Settings
+completeSettingsSample = Settings
+  (Nothing :: Maybe InstallID)
+  (Just AnalyticsEnabled)
+  (NStackHMAC <$> readUserId "1a2b3c" <*> readKey "abc123")
+  (Just (HostName "https://demo-register.nstack.com:8443"))
+  (Just (ServerDetails (Just $ HostName "adfadfa") (Just 3000)))
+  (Just $ HostName "http://localhost:8000")
+  (Just True)
+  (Just 23)
+  (Just Debug)
+
+serializeDeserialize :: Settings -> IO ()
+serializeDeserialize s = do
+  let bs = toStrict (encode s)
+  either
+    (const $ assertFailure "Parsing should not have failed")
+    (assertEqual "Original and serialize-deserialized should be equal" s)
+    (runSettingsParser bs)

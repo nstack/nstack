@@ -7,10 +7,10 @@ module NStack.CLI.Commands (
   loginSettings,
   showStartMessage,
   showStopMessage,
-  localModName,
   printInfo,
   printMethods,
   printProcesses,
+  printScheduledProcesses,
   showModuleBuild,
   registerCommand,
   sendCommand,
@@ -30,19 +30,22 @@ import Data.Char (toLower)
 import Data.Foldable (traverse_)
 import Data.Functor (($>))
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe, isNothing)
+import Data.Maybe (isNothing)
 import Data.Monoid ((<>))
+import Data.Proxy (Proxy(..))
 import Data.Text (Text, unpack)
+import Data.Thyme (UTCTime)
 import Data.Tree (Forest, unfoldForest)
 import Data.Tree.View (showTree)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
+import qualified Data.Yaml as Y
 import Data.Coerce (coerce)
 import qualified Filesystem.Path.CurrentOS as FP -- system-filepath
-import Network.HTTP.Client hiding (responseStatus)
+import Network.HTTP.Client hiding (responseStatus, Proxy)
 import Network.HTTP.Client.TLS (mkManagerSettings)
-import Network.Wreq hiding (responseCookieJar)
+import Network.Wreq hiding (responseCookieJar, Proxy)
 import Util ((<||>))                 -- ghc
 import System.Directory (getXdgDirectory, XdgDirectory(..), createDirectoryIfMissing)
 import System.IO.Error (isDoesNotExistError)
@@ -56,11 +59,11 @@ import NStack.Auth
 import NStack.CLI.Auth (allowSelfSigned)
 import NStack.CLI.Types
 import NStack.CLI.Templates (createFromTemplate)
-import NStack.Comms.Types (GitRepo(..), ProcessId(..), ProcessInfo(..), ModuleInfo(..), ServerInfo(..), EntityType, TypeSignature(..), DSLSource(..), DropBadModules)
-import NStack.Module.Types (Stack, BaseImage(..), DebugOpt(..), ModuleName(..), FnName(..), Qualified(..), showShortModuleName)
+import NStack.Comms.Types
+import NStack.Module.Types
 import NStack.Module.Parser (parseModuleName)
 import qualified NStack.Utils.Archive as Archive
-import NStack.Module.ConfigFile (configFile, workflowFile)
+import NStack.Module.ConfigFile (configFile, workflowFile, ConfigStack(..), mkStackParent)
 import NStack.Prelude.Applicative ((<&>))
 import NStack.Prelude.FilePath (fpToText, fromFP, directory)
 import NStack.Prelude.Shell (runCmd_)
@@ -74,7 +77,7 @@ type Snippet = String
 
 -- | Available sub commands
 data Command
-  = InitCommand InitStack (Maybe BaseImage) GitRepo
+  = InitCommand InitStack GitRepo
   | NotebookCommand DebugOpt (Maybe DSLSource)
   | StartCommand DebugOpt ModuleName FnName
   | StopCommand ProcessId
@@ -86,55 +89,56 @@ data Command
   | ListModulesCommand Bool
   | DeleteModuleCommand ModuleName
   | ListProcessesCommand
+  | ListStoppedCommand (Maybe StoppedFrom) (Maybe StoppedAmount)
   | GarbageCollectCommand
   | BuildCommand DropBadModules
   | RegisterCommand UserName Email ServerAddr
   | SendCommand Path Snippet
   | TestCommand ModuleName FnName Snippet
   | LoginCommand HostName Int UserId SecretKey
+  | ListScheduled
 
-data InitProject = InitProject Text (Maybe Stack) (Maybe ModuleName) -- Name, Stack, Parent Module
-
-instance M.ToMustache InitProject where
-  toMustache (InitProject name stack parent) = M.object
-    [ "name" ~> pprT name
-    , "stack" ~> maybe "" show stack
-    , "parent" ~> maybe "" pprT parent
-    ]
 
 -- Parser for Init command options
-data InitStack = InitWorkflow | InitFramework | InitStack Stack
+data InitStack = InitWorkflow | InitStack Language | InitFramework BaseImage
+data TemplateOut = TemplateOut ModuleName (Maybe Y.Value)
 
-initCommand :: CCmdEff m => InitStack -> Maybe BaseImage -> GitRepo -> m ()
-initCommand initStack mBase (GitRepo wantGitRepo) = do
+instance M.ToMustache TemplateOut where
+  toMustache (TemplateOut name stackOrParent) = M.object [ "name" ~> localModName name
+                                                         , "stackOrParent" ~> maybe "" (decodeUtf8 . Y.encode) stackOrParent ]
+
+-- TODO - these should be moved to the server
+snapshot :: (FedoraVersion, FedoraSnapshot)
+snapshot = (25, 0)
+
+langStacks :: Language -> APIVersion
+langStacks _ = 1
+
+initCommand :: CCmdEff m => InitStack -> GitRepo -> m ()
+initCommand initStack (GitRepo wantGitRepo) = do
   curDir <- R.pwd
   tModuleName <- moduleNameFromDir curDir
   _ <- whenNotExistingProject
   (templateDirs, initProj) <- case initStack of
-    InitWorkflow -> return (["workflow"], InitProject tModuleName Nothing Nothing)
-    InitFramework -> do
+    InitWorkflow -> return (["workflow"], Nothing)
+    InitFramework baseImage -> do
       iParentName <- parseModuleName . _baseImage $ baseImage
-      return (["framework"], InitProject tModuleName Nothing (Just iParentName))
-    (InitStack stack) -> do
-      iParentName <- parseModuleName . _baseImage $ baseImage
-      return (["common", map toLower . show $ stack], InitProject tModuleName (Just stack) (Just iParentName))
+      return (["framework"], Just . mkStackParent . Right $ iParentName)
+    InitStack lang -> do
+      let cfgStack = ConfigStack lang (langStacks lang) snapshot
+      return (["common", map toLower . show $ lang], Just . mkStackParent . Left $ cfgStack)
   -- copy the init files into the module dir
   liftIO $ mapM_ (createFromTemplate (fromFP curDir)) templateDirs
   -- run the template over them
-  runTemplates curDir initProj
+  runTemplates curDir tModuleName initProj
   when wantGitRepo initGitRepo
-  liftIO . TIO.putStrLn $ "Module '" <> pprT tModuleName <> "' successfully initialised at " <> T.pack (fromFP curDir)
-  where
-    -- hardcode the default image and version number temporarily
-    baseImage = flip fromMaybe mBase $ case initStack of
-      (InitStack stack) -> BaseImage . T.pack $ "NStack."++show stack++":0.25.0"
-      _ -> BaseImage . T.pack $ "NStack.Python:0.25.0"
+  liftIO . TIO.putStrLn $ "Module '" <> localModName tModuleName <> "' successfully initialised at " <> T.pack (fromFP curDir)
 
 -- | Extract the module name from the current directory
-moduleNameFromDir :: CCmdEff m => R.FilePath -> m Text
+moduleNameFromDir :: CCmdEff m => R.FilePath -> m ModuleName
 moduleNameFromDir curDir = ((fmap capitaliseT . fpToText . FP.filename $ curDir) <&> (<> ":0.0.1-SNAPSHOT") >>= parseModuleName) `catchError` (\err -> throwError (
   "Your directory name, " <> FP.encodeString curDir <> ", is not a valid module name.\n"
-  <> err)) >>= return . localModName
+  <> err))
 
 -- | Run project git/dir check
 whenNotExistingProject  :: CCmdEff m => m ()
@@ -142,17 +146,24 @@ whenNotExistingProject =
   whenM (liftIO $ R.testdir ".git" <||> R.testfile configFile)
     (throwError "Found existing project, cancelling")
 
--- | process the initial module file using templates
-runTemplates :: CCmdEff m => R.FilePath -> InitProject -> m ()
-runTemplates curDir projInfo = do
+-- | process the initial module files using templates
+runTemplates :: CCmdEff m => R.FilePath -> ModuleName -> Maybe Y.Value -> m ()
+runTemplates curDir modName stackOrParent = do
   files <- R.fold (R.ls curDir) L.list
   traverse_ (runTemplate . fromFP) files
   where
     runTemplate :: CCmdEff m => FilePath -> m ()
     runTemplate inFile = do
       template <- eitherToExcept =<< liftIO (first show <$> M.localAutomaticCompile inFile)
-      let newText = M.substitute template projInfo
+      let newText = M.substitute template (TemplateOut modName stackOrParent)
       liftIO $ TIO.writeFile inFile newText
+
+
+-- HACK - to remove once we have username on CLI / remove modulename parsing
+-- Currently used to display the ModuleName on the CLI without the default `nstack` author
+localModName :: ModuleName -> Text
+localModName = last . T.splitOn "nstack/" . T.pack . showShortModuleName
+
 
 -- | init the module using Git
 initGitRepo :: CCmdEff m => m ()
@@ -173,11 +184,14 @@ buildArtefacts dir globs = do
   liftIO $ Archive.expandCheckPack dir std_files globs
 
 printInfo :: ServerInfo -> Text
-printInfo (ServerInfo ps meths ms) = prettyT' $
+printInfo (ServerInfo ps stopped meths ms) = prettyT' $
       block "Running processes:" (map M.ppr ps) </>
-      block "Available functions:" (prettyPrintMethods $ coerce . Map.toList $ meths) </>
+      block "Stopped processes:" (map M.ppr stopped) </>
+      block "Available functions:" (prettyPrintMethods $ coerce . Map.toList . fmap typeSignature $ meths) </>
       M.text "Container modules:" </> showModules ms
         where
+
+          typeSignature (MethodInfo t _) = t
 
           showModules :: Map.Map ModuleName ModuleInfo -> M.Doc
           showModules = M.stack . fmap M.text . renderTree . mkTree . Map.toList
@@ -206,26 +220,46 @@ prettyPrintMethods =  moduleMethodBlocks . fmap (fmap printMethod) . fmap Map.to
         nest = foldr (\((Qualified c d), a) m -> Map.unionWith (<>) m (newMap c d a)) Map.empty
         newMap c d a = Map.singleton c (Map.singleton d a)
 
-printProcesses :: [ProcessInfo] -> Text
-printProcesses [] = "No running processes"
-printProcesses xs = prettyT' $ M.text "pid" <> M.spaces 4 <> M.text "time" <> M.spaces 21 <> M.text "command" </>
-                    M.text (replicate 40 '=') </>
-                    M.stack (map M.ppr xs)
+printProcesses :: forall a. ProcPrintable a => [ProcessInfo a] -> Text
+printProcesses = \case
+  [] -> emptyMessage p
+  xs -> prettyT' $ M.text "pid" <> M.spaces 4 <> M.text "time" <> M.spaces 21 <> columnHeader p <> M.text "command" </>
+                   M.text (replicate (40 + columnWidth p) '=') </>
+                   M.stack (map M.ppr xs)
+  where p = Proxy @a
 
+class (M.Pretty (ProcessInfo a)) => ProcPrintable a where
+  emptyMessage :: Proxy a -> Text
+  columnHeader :: Proxy a -> M.Doc
+  columnWidth  :: Proxy a -> Int
+
+instance ProcPrintable () where
+  emptyMessage _ = "No running processes"
+  columnHeader _ = mempty
+  columnWidth  _ = 0
+
+instance ProcPrintable StopTime where
+  emptyMessage _ = "No stopped processes in range"
+  columnHeader _ = M.text "stop time" <> M.spaces 16
+  columnWidth  _ = 25
+
+printScheduledProcesses :: [(ProcessInfo (), [UTCTime])] -> Text
+printScheduledProcesses [] = "No scheduled processes"
+printScheduledProcesses xs = prettyT' $
+  M.stack items
+  where
+    items = fmap (\(pInfo, datetimes) ->
+                    M.text "Process " <> M.ppr pInfo </>
+                    M.text "Next scheduled times: " <> M.stack (M.ppr <$> datetimes) </> M.text (replicate 10 '-')) xs
 
 block :: String -> [M.Doc] -> M.Doc
 block label stack = M.text label </> M.indent 4 (M.stack stack) </> M.empty
 
-showStartMessage :: ProcessInfo -> Text
-showStartMessage (ProcessInfo (ProcessId pId) _ _) = "Successfully started as process " <> pId
+showStartMessage :: ProcessInfo () -> Text
+showStartMessage (ProcessInfo (ProcessId pId) _ _ _) = "Successfully started as process " <> pId
 
-showStopMessage :: ProcessId -> Text
-showStopMessage (ProcessId pId) = "Successfully stopped process " <> pId
-
--- HACK - to remove once we have username on CLI / remove modulename parsing
--- Currently used to display the ModuleName on the CLI without the default `nstack` author
-localModName :: ModuleName -> T.Text
-localModName = last . T.splitOn "nstack/" . T.pack . showShortModuleName
+showStopMessage :: (ProcessInfo a) -> Text
+showStopMessage (ProcessInfo (ProcessId pId) _ _ _) = "Successfully stopped process " <> pId
 
 showModuleBuild :: ModuleName -> Text
 showModuleBuild mName = "Module " <> pprT mName <> " built successfully. Use `nstack list functions` to see all available functions."
@@ -254,7 +288,7 @@ sendCommand path snippet = do
   eitherToExcept =<< liftIO (callServer serverHost event `E.catch` wreqErrorHandler)
   liftIO . TIO.putStrLn $ "Event sent successfully"
   where
-    mkServerAddr serverHost = "http://" <> T.unpack serverHost <> ":8080" <> path
+    mkServerAddr serverHost = "https://" <> T.unpack serverHost <> ":8083" <> path
     -- convert snippet to json event we can send
     mkEvent = do
       p <- eitherToExcept (eitherDecodeStrict' (encodeUtf8 . T.pack $ snippet) :: Either String Value)

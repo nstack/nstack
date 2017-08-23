@@ -1,5 +1,7 @@
 module NStack.Prelude.Exception
   ( TransientError(..)
+  , throwTransientError
+  , throwTransientErrorT
   , PermanentError(..)
   , throwPermanentError
   , throwPermanentErrorT
@@ -16,6 +18,13 @@ data TransientError = TransientError String
 
 instance Exception TransientError where
   displayException (TransientError msg) = msg
+
+-- | A shortcut for commonly-occurring @liftIO . throwIO . PermanentError@.
+throwTransientError :: MonadIO m => String -> m a
+throwTransientError = liftIO . throwIO . TransientError
+
+throwTransientErrorT :: MonadIO m => Text -> m a
+throwTransientErrorT = throwTransientError . unpack
 
 data PermanentError = PermanentError String
   deriving (Show, Typeable)

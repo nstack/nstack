@@ -1,5 +1,5 @@
 name: nstack-prelude
-version: 0.0.7.1
+version: 0.0.8
 cabal-version: >=1.22
 build-type: Simple
 license: BSD3
@@ -22,6 +22,7 @@ library
     NStack.Prelude.FilePath
     NStack.Prelude.Format
     NStack.Prelude.Parsec
+    NStack.Prelude.Map
     NStack.Prelude.Monad
     NStack.Prelude.Pipes
     NStack.Prelude.Shell

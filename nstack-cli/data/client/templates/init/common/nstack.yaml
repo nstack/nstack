@@ -1,9 +1,5 @@
-# The language stack to use
-stack: {{ stack }}
-
-# Parent Image
-parent: {{ parent }}
-
+# The language stack or parent image to use
+{{ stackOrParent }}
 # (Optional) System-level packages needed
 packages: []
 

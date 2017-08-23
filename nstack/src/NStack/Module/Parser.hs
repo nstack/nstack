@@ -28,8 +28,8 @@ spaceConsumer = L.space (void spaceChar) (L.skipLineComment "/") (L.skipBlockCom
 symbol :: String -> Parser String
 symbol    = L.symbol spaceConsumer
 
-pStack :: Parser Stack
-pStack = ((string "python" <|> string "Python") *> ((Python2 <$ (string "27" <|> string "2"))
+pLanguage :: Parser Language
+pLanguage = ((string "python" <|> string "Python") *> ((Python2 <$ (string "27" <|> string "2"))
                                                     <|> pure Python))
          <|> (NodeJS <$ (string "nodejs" <|> string "NodeJS"))
 

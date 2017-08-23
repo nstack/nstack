@@ -1,5 +1,5 @@
 name: nstack-cli
-version: 0.0.7.1
+version: 0.0.8
 cabal-version: >=1.22
 build-type: Simple
 license: BSD3
@@ -57,8 +57,10 @@ library
         process,
         system-filepath,
         text,
+        thyme,
         tree-view,
         turtle,
+        yaml,
         nstack -any,
         nstack-prelude -any
   other-modules:

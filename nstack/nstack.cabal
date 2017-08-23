@@ -1,5 +1,5 @@
 name: nstack
-version: 0.0.7.1
+version: 0.0.8
 cabal-version: >=1.22
 build-type: Simple
 license: BSD3
@@ -20,10 +20,13 @@ library
     exposed-modules:
           NStack.Auth
           NStack.Common.Environment
+          NStack.Comms.TypeRepresentation
           NStack.Comms.Types
           NStack.UUIDOrphans
           NStack.Module.Parser
+          NStack.Module.QMap
           NStack.Module.Types
+          NStack.Module.Types.Aeson
           NStack.SafeCopyOrphans
           NStack.Settings
           NStack.Utils.Archive
