@@ -9,18 +9,19 @@ import Test.Tasty.HUnit
 import Test.Tasty.Runners (defaultMainWithIngredients)
 import Test.Tasty.Runners.AntXML
 
+import NStack.Auth (readKey, readUserId)
+import NStack.ModuleNameTests
 import NStack.Module.Types
 import NStack.Settings
-import NStack.Auth (readKey, readUserId)
-
 
 main :: IO ()
 main = defaultMainWithIngredients (antXMLRunner:defaultIngredients) $ testGroup "Tests" [
-  settingsParserTests
+  settingsParserTests,
+  moduleNameTests
   ]
 
 settingsParserTests :: TestTree
-settingsParserTests = testGroup "Unit Tests"
+settingsParserTests = testGroup "Settings Tests"
   [ testCase "Display a proper error message when invalid analytics settings" $
       checkErrorMessages "test/res/invalid-analytics-settings.conf" "Expected \"disabled\", \"enabled\" instead of",
     testCase "Display a proper error message when invalid install-id" $

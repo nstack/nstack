@@ -10,6 +10,8 @@ import qualified Data.Map as Map
 import Data.Monoid ((<>))
 import Data.SafeCopy (deriveSafeCopy, base, SafeCopy(..))
 import Data.Serialize (Serialize(..))
+import Data.Serialize.Put (Put)
+import Data.Serialize.Get (Get)
 import Data.Serialize.Text () -- Serialize Text instances
 import Data.String (IsString)
 import Data.Text (Text)
@@ -39,6 +41,9 @@ newtype StartTime = StartTime { _startBookend :: BookendTime }
 newtype StopTime = StopTime { _stopBookend :: BookendTime }
   deriving (Eq, Ord, Serialize, Pretty)
 
+newtype ScheduledTime = ScheduledTime { _unscheduledBookend :: UTCTime }
+  deriving (Eq, Ord)
+
 instance Show BookendTime where
   show (BookendTime t) = show t
 
@@ -48,32 +53,36 @@ instance Show StopTime where
 instance Show StartTime where
   show (StartTime t) = show t
 
+instance Show ScheduledTime where
+  show (ScheduledTime t) = show t
+
 instance Pretty BookendTime where
   ppr = text . show
 
-instance Serialize BookendTime where
-  put (BookendTime t) = put $ timeToUnix t
-  get = do
-    s <- get
-    maybe (fail "Could not parse date string") return $ timeM s
-      where timeM = fmap BookendTime . timeFromUnix
+instance Pretty ScheduledTime where
+  ppr = text . show
 
-instance Serialize UTCTime where
-  put t = put $ timeToUnix t
-  get = do
-    s <- get
-    maybe (fail "Could not parse date string") return $ timeFromUnix s
+putTime :: UTCTime -> Put
+putTime = put . timeToUnix
+
+getTime :: Get UTCTime
+getTime = do
+  s <- get
+  maybe (fail "Could not parse date string") return $ timeFromUnix s
+
+instance Serialize BookendTime where
+  put (BookendTime t) = putTime t
+  get = BookendTime <$> getTime
+
+instance Serialize ScheduledTime where
+  put (ScheduledTime t) = putTime t
+  get = ScheduledTime <$> getTime
 
 instance SafeCopy StartTime
 
 instance SafeCopy BookendTime
 
 instance SafeCopy StopTime
-
-instance Pretty UTCTime where
-  ppr = text . show
-
-
 
 newtype ProcessId = ProcessId Text
   deriving (Eq, Pretty, Ord, Generic)
@@ -286,7 +295,7 @@ infoCommand = ApiCall "InfoCommand"
 listCommand :: ApiCall (Maybe EntityType, Bool) [(Qualified Text, TypeSignature)]
 listCommand = ApiCall "ListCommand"
 
-listScheduledCommand :: ApiCall () [(ProcessInfo (), [UTCTime])]
+listScheduledCommand :: ApiCall () [(ProcessInfo (), [ScheduledTime])]
 listScheduledCommand = ApiCall "ListScheduledCommand"
 
 listModulesCommand :: ApiCall Bool [ModuleName]

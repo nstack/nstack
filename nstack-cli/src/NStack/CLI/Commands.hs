@@ -34,7 +34,6 @@ import Data.Maybe (isNothing)
 import Data.Monoid ((<>))
 import Data.Proxy (Proxy(..))
 import Data.Text (Text, unpack)
-import Data.Thyme (UTCTime)
 import Data.Tree (Forest, unfoldForest)
 import Data.Tree.View (showTree)
 import qualified Data.Text as T
@@ -243,7 +242,7 @@ instance ProcPrintable StopTime where
   columnHeader _ = M.text "stop time" <> M.spaces 16
   columnWidth  _ = 25
 
-printScheduledProcesses :: [(ProcessInfo (), [UTCTime])] -> Text
+printScheduledProcesses :: [(ProcessInfo (), [ScheduledTime])] -> Text
 printScheduledProcesses [] = "No scheduled processes"
 printScheduledProcesses xs = prettyT' $
   M.stack items

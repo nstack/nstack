@@ -1,24 +1,25 @@
 module NStack.Module.Parser where
 
-import Data.Foldable (asum, for_)
+import Data.Foldable (asum)
+import Control.Applicative (optional, some)
 import Control.Monad (void)
 import Control.Monad.Except (MonadError, throwError, catchError)
 
 import Data.Bifunctor (first)
-import Data.Char (isUpper, isAlphaNum)
+import Data.Char (isAlphaNum, isAlpha)
 import Data.Semigroup
-import Data.Maybe (isNothing)
 import Data.Text (Text)                        -- from: text
-import qualified Data.Text as T                -- from: text
-import qualified Data.Text.Read as T           -- from: text
+import Data.Text (pack, unpack)                -- from: text
 import Data.Void (Void)
-import Text.Megaparsec (Parsec, parse, parseErrorPretty, many, parseMaybe, (<|>), skipMany, eof)    -- from: megaparsec
-import Text.Megaparsec.Char (spaceChar, alphaNumChar, char, anyChar, string)    -- from: megaparsec
+import Text.Megaparsec (Parsec, MonadParsec, parse, parseErrorPretty, many, parseMaybe, (<|>), skipMany, eof, sepBy1, try)    -- from: megaparsec
+import Text.Megaparsec.Char (spaceChar, alphaNumChar, char, anyChar, string, upperChar)    -- from: megaparsec
+import Text.Regex.Applicative (sym, psym, RE, match)
+import Text.Regex.Applicative.Common (decimal)
 import qualified Text.Megaparsec.Lexer as L    -- from: megaparsec
 
 import NStack.Auth (UserName(..), nstackUserName)
 import NStack.Module.Types
-import NStack.Prelude.Monad (maybeToExcept, eitherToExcept)
+import NStack.Prelude.Monad (maybeToExcept, eitherToExcept, orError)
 
 type Parser = Parsec Void Text
 
@@ -40,87 +41,51 @@ inlineParser p = eitherToExcept . first parseErrorPretty . parse (spaces *> p <*
 
 parseModuleName :: MonadError String m => Text -> m ModuleName
 parseModuleName n = (do
-  (ident, v1, v2, v3, r) <- splitModName n
+  (ModuleIdentifier ident v1 v2 v3 r) <- match modNameRegex (unpack n) `orError` "Not a valid modulename"
   parseModuleName' Nothing ident v1 v2 v3 r) `catchError` fmtError
   where fmtError err = throwError $
-          "Could not parse module name " <> T.unpack n <> ".\n"
+          "Could not parse module name " <> unpack n <> ".\n"
           <> err
 
--- | Split a module into its elements
-splitModName :: MonadError String m => Text -> m (Text, Integer, Integer, Integer, Release)
-splitModName modname = do
-  (name, ver_snapshot) <-
-    case T.splitOn ":" modname of
-      [name, ver_snapshot] -> return (name, ver_snapshot)
-      _ -> noVersion
-  for_ (T.find (not . validChar) name) $ \c ->
-    invalidChar c
-  (ver, snapshot) <-
-    case T.splitOn "-" ver_snapshot of
-      [ver] -> return (ver, Release)
-      [ver, snapshot]
-        | snapshot == "SNAPSHOT" -> return (ver, Snapshot)
-        | otherwise -> badSnapshot snapshot
-      _ -> manyDashes
-  let ver_components_text = T.splitOn "." ver
-  ver_components <- mapM parseVerNumber ver_components_text
-  (v1, v2, v3) <-
-    case ver_components of
-      [v1, v2, v3] -> return (v1, v2, v3)
-      _ -> wrongNumberOfComponents
-  return (name, v1, v2, v3, snapshot)
-  where
-    parseVerNumber txt =
-      case T.decimal txt of
-        Left {} -> badVersionComponent txt
-        Right (n, rest) ->
-          if T.null rest
-            then return n
-            else badVersionComponent txt
-    validChar c = isAlphaNum c || c `elem` ("./" :: [Char])
+data ModuleIdentifier = ModuleIdentifier Text Integer Integer Integer Release
 
-    noVersion = throwError "Module must have a version, e.g. Foo:1.2.3 or Foo:1.2.3-SNAPSHOT"
-    wrongNumberOfComponents = throwError "Version must have exactly three components (e.g. 1.2.3)"
-    badSnapshot snapshot = throwError $
-      "Unexpected part of module version: " ++ T.unpack snapshot ++
-      "\nDid you mean 'SNAPSHOT'?"
-    manyDashes = throwError "A dash ('-') is only allowed as part of '-SNAPSHOT'"
-    badVersionComponent v = throwError $ "Version component " ++ show v ++ " is not an integer"
-    invalidChar c = throwError $ "Invalid character in module name: " ++ show c ++
-      "\nValid characters are letters, numbers, '.', and '/'"
+-- A Canonical Module Name Lexer we can re-use
+modNameRegex :: RE Char ModuleIdentifier
+modNameRegex = ModuleIdentifier <$> ident' <*> dec' ':' <*> dec' '.' <*> dec' '.' <*> snap
+  where
+    ident' = fmap pack $
+      ((:) <$> psym (\c -> isAlpha c || c == '_')
+           <*> many (psym $ \c -> isAlphaNum c || c == '_' || c == '.' || c == '/')
+      ) <|> "[Byte]" -- for backwards compatibility, see #701
+    dec' a = sym a *> decimal
+    snap = maybe Release (const Snapshot) <$> optional "-SNAPSHOT"
 
 pRawModuleName :: Parser String
 pRawModuleName = many . asum $ alphaNumChar : map char ".:/-"
 
 -- | Parse and extract the raw modulename string from a DSL
 dslModuleName :: Parser Text
-dslModuleName = T.pack <$> (spaceConsumer *> (symbol "module") *> pRawModuleName <* (skipMany anyChar) <* eof)
+dslModuleName = pack <$> (spaceConsumer *> (symbol "module") *> pRawModuleName <* (skipMany anyChar) <* eof)
 
 -- | Parse and return the module name from a DSL
 getDslName :: MonadError String m => Text -> m ModuleName
 getDslName src = (maybeToExcept "Can't find DSL ModuleName" . parseMaybe dslModuleName $ src) >>= parseModuleName
 
 -- | Parse a module name as a single identifier
--- TODO - this needs improvement
-parseModuleName' :: (Monad m) => Maybe UserName -> Text -> Integer -> Integer -> Integer -> Release -> m ModuleName
-parseModuleName' mUser ident v1 v2 v3 r = do
-  modNameF <- case T.splitOn "/" ident of
-    [] -> error "moduleName': empty identifier (shouldn't happen)"
-    [modName] -> ModuleName nStackRegistry defaultAuthor <$> mkModName modName
-    [regOrAuthor, modName] -> if isAuthor regOrAuthor
-      then ModuleName nStackRegistry (UserName regOrAuthor) <$> mkModName modName
-      else ModuleName <$> mkReg regOrAuthor <*> pure defaultAuthor <*> mkModName modName
-    [reg, author, modName] -> ModuleName <$> mkReg reg <*> pure (UserName author) <*> mkModName modName
-    _ -> fail'
-  return . modNameF $ Version v1 v2 v3 r
-    where
-      -- check all elements begin with upper char
-      mkModName modName = if validModName modName then return $ NSUri (T.splitOn "." modName) else fail'
-      validModName modName = all (\x -> Just True == (isUpper . fst <$> T.uncons x)) $ T.splitOn "." modName
-      isAuthor = isNothing . T.find (== '.')
-      mkReg x = let reg = T.splitOn "." x in
-        if length reg > 1 then return (NSUri reg) else fail "Invalid registry length"
-      fail' = fail "Invalid module name, must be capitalised and separated with '.'"
-      defaultAuthor = maybe nstackUserName id mUser
+parseModuleName' :: MonadError String m => Maybe UserName -> Text -> Integer -> Integer -> Integer -> Release -> m ModuleName
+parseModuleName' user ident v1 v2 v3 r = inlineParser (pModuleName user) ident <*> pure (Version v1 v2 v3 r)
 
+pModuleName :: forall m . MonadParsec Void Text m => Maybe UserName -> m (Version -> ModuleName)
+pModuleName user = asum $ fmap try [
+    ModuleName <$> registry   <*> author    <*> name,
+    ModuleName nStackRegistry <$> author    <*> name,
+    ModuleName nStackRegistry defaultAuthor <$> name
+  ]
+  where
+    registry = fmap NSUri $ ((:) <$> (pathElem <* char '.') <*> (pathElem `sepBy1` char '.')) <* char '/' -- registry must be at least 2 elems
+    author = UserName <$> pathElem <* char '/'
+    pathElem = pack <$> some (alphaNumChar <|> char '_')
+    name = NSUri <$> nameElem `sepBy1` char '.'
+    nameElem = fmap pack $ (:) <$> upperChar <*> many (alphaNumChar <|> char '_')
+    defaultAuthor = maybe nstackUserName id user
 
