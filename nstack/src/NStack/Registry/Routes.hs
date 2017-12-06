@@ -29,12 +29,17 @@ type DockerRegistryV2API =
     :<|> Capture "name" Name :> "blobs" :> Capture "digest" Digest :> Get '[OctetStream] BS.ByteString
     --
     -- POST /v2/<name>/blobs/uploads/
-    -- https://docs.docker.com/registry/spec/api/#pushing-an-layer
+    -- https://docs.docker.com/registry/spec/api/#pushing-a-layer
 --     :<|> Capture "name" Name :> "blobs" :> "uploads" :> ReqBody '[OctetStream] BS.ByteString :> Post ErrorContainer
     --
     -- PUT /v2/<name>/manifests/<reference>
     -- https://docs.docker.com/registry/spec/api/#pushing-an-image-manifest
     :<|> Capture "name" Name :> "manifests" :> Capture "reference" Reference :> ReqBody '[DockerImageManifestV2_2] DockerImageManifestV2_2 :> Put '[JSON] ErrorContainer
+    --
+    -- POST /v2/<name>/blobs/uploads/?mount=<digest>&from=<src_name>
+    -- https://docs.docker.com/registry/spec/api/#cross-repository-blob-mount
+    -- TODO(jonboulle): this should handle ErrorContainer responses
+    :<|> Capture "name" Name :> "blobs" :> "uploads" :> QueryParam "mount" Digest :> QueryParam "from" Name :> Post '[PlainText] T.Text
 
 
 type Name = T.Text
@@ -43,6 +48,7 @@ type Reference = T.Text
 
 type Tag = T.Text
 
+-- TODO(jonboulle): stricter type here
 type Digest = T.Text
 
 type AcceptHeader = T.Text
@@ -87,4 +93,5 @@ getCatalog :: ClientM CatalogContainer
 getImageManifest :: Name -> Reference -> Maybe AcceptHeader -> ClientM DockerImageManifestV2_2
 getBlob :: Name -> Digest -> ClientM BS.ByteString
 putManifest :: Name -> Reference -> DockerImageManifestV2_2 -> ClientM ErrorContainer
-(getTags :<|> getCatalog :<|> getImageManifest :<|> getBlob :<|> putManifest) = client registryAPI
+crossMount :: Name -> Maybe Digest -> Maybe Name -> ClientM T.Text
+(getTags :<|> getCatalog :<|> getImageManifest :<|> getBlob :<|> putManifest :<|> crossMount) = client registryAPI

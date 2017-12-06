@@ -1,16 +1,15 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module NStack.Module.Types (module NStack.Module.Types) where
+
 import Control.Lens (Lens', iso, Iso')   -- from: lens
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Base16
 import Data.Coerce (coerce)
-import Data.SafeCopy (base, deriveSafeCopy, extension, Migrate(..), SafeCopy(..), safePut, safeGet, contain)
 import Data.Monoid ((<>))
+import Data.SafeCopy (base, deriveSafeCopy, SafeCopy(..), safePut, safeGet, contain)
 import Data.Serialize (Serialize(..))
-import Data.Serialize.Get (getListOf)
-import Data.Serialize.Put (putListOf)
 import Data.String (IsString)
 import Data.Text (Text)                        -- from: text
 import qualified Data.Text as T                -- from: text
@@ -23,10 +22,11 @@ import GHC.Generics (Generic)
 import Text.PrettyPrint.Mainland (Pretty, ppr, text, commasep, char, integer)   -- from: mainland-pretty
 import Text.Printf (printf)
 
-import NStack.Auth (UserName(..), nstackUserName)
+import NStack.Module.Name (ModuleRef, mkNStackModuleRef, NSUri(..))
+import NStack.Module.Version (ExactRelease(..), SemVer(..))
 import NStack.SafeCopyOrphans ()
 import NStack.UUIDOrphans ()
-import NStack.Prelude.Text (showT, putText, getText, pprS)
+import NStack.Prelude.Text (putText, getText, pprS)
 
 type APIVersion = Integer
 
@@ -48,119 +48,18 @@ instance Pretty Language where
 instance Pretty Stack where
   ppr (Stack l v) = ppr l <> char '-' <> integer v
 
-newtype NSUri = NSUri { _nsUri :: [Text] }
-  deriving (Eq, Ord, Typeable, Data, Generic)
-
-instance ToJSON NSUri
-instance FromJSON NSUri
-
-instance Show NSUri where
-  show = T.unpack . T.intercalate "." . _nsUri
-
-instance Serialize NSUri where
-  put = coerce (putListOf putText)
-  get = coerce (getListOf getText)
-
-$(deriveSafeCopy 0 'base ''NSUri)
-
 newtype Author = Author Text
 
 instance Serialize Author where
   put = coerce putText
   get = coerce getText
 
-data Version_v0 = Version_v0 Integer Integer Integer
-data Version_v1 = Version_v1 Integer Integer Integer Bool
-
--- The order of constructors is significant for the Ord instance
-data Release = Snapshot | Release
-  deriving (Eq, Ord, Show, Generic, Typeable, Data)
-
-instance ToJSON Release
-instance FromJSON Release
-
--- TODO add version helper funcs that support semver?
-data Version = Version {
-  _majorVer :: Integer,
-  _minorVer :: Integer,
-  _patchVer :: Integer,
-  _release  :: Release
-} deriving (Eq, Ord, Generic, Typeable, Data)
-
-instance ToJSON Version
-instance FromJSON Version
-
-instance Migrate Version_v1 where
-  type MigrateFrom Version_v1 = Version_v0
-  migrate (Version_v0 a b c) = Version_v1 a b c True
-instance Migrate Version where
-  type MigrateFrom Version = Version_v1
-  migrate (Version_v1 a b c isRelease) = Version a b c $
-    if isRelease then Release else Snapshot
-
-instance Show Version where
-  show (Version ma mi p r) =
-    show ma <> "." <> show mi <> "." <> show p <>
-      case r of
-        Release -> ""
-        Snapshot -> "-SNAPSHOT"
-
-initVersion :: Version
-initVersion = Version 0 0 1 Snapshot
-
-data ModuleName_v0 = MN0 NSUri Author NSUri Version
-  deriving (Generic)
-
--- | Name for a unique module that exists on the server
-data ModuleName = ModuleName {
-  _mRegistry :: NSUri,
-  _mAuthor :: UserName,
-  _mName :: NSUri,
-  _mVersion :: Version
-} deriving (Show, Eq, Ord, Generic, Typeable, Data)
-
-instance Pretty ModuleName where
-  ppr = text . showShortModuleName
-
-nStackRegistry :: NSUri
-nStackRegistry = NSUri ["registry", "nstack", "com"]
-
--- | Helper function to create a ModuleName using the default registry/author
-mkNStackModuleName :: NSUri -> Version -> ModuleName
-mkNStackModuleName = ModuleName nStackRegistry nstackUserName
-
 type FedoraVersion = Integer
 type FedoraSnapshot = Integer
 
 -- | Make an NStack module name used internally for base images by the system
-mkBaseModuleName :: Text -> APIVersion -> FedoraVersion -> FedoraSnapshot -> ModuleName
-mkBaseModuleName s v majS minS = mkNStackModuleName (NSUri ["NStack", s]) (Version majS minS v Release)
-
--- | display the module name, hiding registry and author if they are the default
-showShortModuleName :: ModuleName -> String
-showShortModuleName ModuleName{..} = T.unpack $ reg <> aut <> showT _mName <> ":" <> showT _mVersion
-  where
-    reg = if _mRegistry == nStackRegistry then "" else showT _mRegistry <> "/"
-    -- changing to always show author for now, rather than hiding if aut == nStackAuthor
-    aut = _username _mAuthor <> "/"
-
-
-instance Serialize Release
-instance Serialize Version
-instance Serialize ModuleName_v0
-instance Serialize ModuleName
-
-$(deriveSafeCopy 0 'base ''Author)
-$(deriveSafeCopy 0 'base ''Release)
-$(deriveSafeCopy 0 'base ''Version_v0)
-$(deriveSafeCopy 1 'extension ''Version_v1)
-$(deriveSafeCopy 2 'extension ''Version)
-$(deriveSafeCopy 0 'base ''ModuleName_v0)
-$(deriveSafeCopy 1 'extension ''ModuleName)
-
-instance Migrate ModuleName where
-  type MigrateFrom ModuleName = ModuleName_v0
-  migrate (MN0 n (Author t) n' v) = ModuleName n (UserName t) n' v
+mkBaseModuleName :: Text -> APIVersion -> FedoraVersion -> FedoraSnapshot -> ModuleRef
+mkBaseModuleName s v majS minS = mkNStackModuleRef (NSUri ["NStack", s]) (SemVer majS minS v Release)
 
 -- | The name of an NStack function
 newtype FnName = FnName Text
@@ -186,9 +85,11 @@ instance Serialize TyName where
   put = coerce putText
   get = coerce getText
 
+$(deriveSafeCopy 0 'base ''TyName)
+
 -- | A fully-qualified function or type name
 data Qualified a = Qualified
-  { _modName :: ModuleName
+  { _modName :: ModuleRef
   , _unqualName :: a
   }
   deriving (Eq, Ord, Typeable, Generic, Data)

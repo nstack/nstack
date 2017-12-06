@@ -26,7 +26,9 @@ import Language.Haskell.TH (Name)
 import Control.Exception(Exception(..))
 
 import NStack.Comms.TypeRepresentation
-import NStack.Module.Types (DebugOpt, ModuleName, QFnName, Stack, Image(..), Qualified)
+import NStack.Module.Name (ModuleRef)
+import NStack.Module.QMap (QMap)
+import NStack.Module.Types (DebugOpt, FnName, TyName, QFnName, Stack, Image(..))
 import NStack.Prelude.Text (putText, getText)
 import NStack.Prelude.Time (timeToUnix, timeFromUnix)
 
@@ -93,6 +95,9 @@ newtype StoppedFrom = StoppedFrom Int
 newtype StoppedAmount = StoppedAmount Int
   deriving (Serialize, Num)
 
+newtype FormId = FormId UUID
+  deriving (Eq, Show, Ord, Serialize, Pretty)
+
 processIdText :: Lens' ProcessId Text
 processIdText f (ProcessId t) = ProcessId <$> f t
 
@@ -138,23 +143,37 @@ newtype DSLSource = DSLSource { _src :: Text }
 data ServerInfo = ServerInfo {
   _siProcesses  :: [ProcessInfo ()],
   _siStopped    :: [ProcessInfo StopTime],
-  _siMethods    :: Map.Map QFnName MethodInfo,
-  _siModules    :: Map.Map ModuleName ModuleInfo }
+  _siMethods    :: QMap FnName MethodInfo,
+  _siModules    :: Map.Map ModuleRef ModuleInfo }
   deriving (Eq, Show, Generic)
+
+data ForFrontend = ForFrontend
+  { _wuProcesses  :: [ProcessInfo ()]
+  , _wuStopped    :: [ProcessInfo StopTime]
+  , _wuMethods    :: QMap FnName MethodInfo
+  , _wuModules    :: Map.Map ModuleRef ModuleInfo
+  , _wuOldModules :: QMap FnName MethodInfo
+  , _wuAvailLogs  :: Maybe [LogsLine]
+  , _wuServerLogs :: [LogsLine]
+  } deriving (Eq, Show, Generic)
 
 -- | Simplified module info for sending to the CLI
 data ModuleInfo = ModuleInfo {
   _miStack :: Maybe Stack,
   _miImage :: Image,
-  _miParent :: Maybe ModuleName,
+  _miParent :: Maybe ModuleRef,
   _miIsFramework :: Bool
 } deriving (Generic, Eq, Show)
 
 
-data EntityType = MethodType | SourceType | SinkType | WorkflowType | TypeType
+data TypeType = TypeType
   deriving (Eq, Show, Generic)
 
-instance Serialize EntityType
+data MethodType = MethodType | SourceType | SinkType | WorkflowType
+  deriving (Eq, Show, Generic)
+
+instance Serialize MethodType
+instance Serialize TypeType
 
 data ContainerData = ContainerData {
   _containerTypeSigs :: Text,
@@ -215,17 +234,12 @@ instance Serialize BuildTarball where
   get = coerce $ get @ByteString
 
 instance Serialize ServerInfo
+instance Serialize ForFrontend
 instance Serialize ModuleInfo
 
 deriveSafeCopy 0 'base ''ProcessId
 deriveSafeCopy 0 'base ''ProcessInfo
 deriveSafeCopy 0 'base ''ContainerId
-
--- | If we encounter a module that doesn't build, should we fail or
--- siltently drop it and all its reverse dependencies?
-data DropBadModules = DropBadModules | FailBadModules
-  deriving (Eq, Show, Generic)
-instance Serialize DropBadModules
 
 -- NStack Toolkit/Server Communication
 newtype ServerReturn a = ServerReturn { _serverReturn :: Either StructuredError a } -- return type used internally for commands
@@ -291,17 +305,35 @@ serverLogsCommand = ApiCall "ServerLogsCommand"
 infoCommand :: ApiCall Bool ServerInfo
 infoCommand = ApiCall "InfoCommand"
 
+frontendInfoCommand :: ApiCall (Maybe ProcessId, Maybe StoppedFrom) ForFrontend
+frontendInfoCommand =  ApiCall "FrontendInfoCommand"
+
+formRefreshCommand :: ApiCall () (Map.Map FormId (MTypeRepresentation, ProcessInfo (), QFnName))
+formRefreshCommand = ApiCall "FormRefreshCommand"
+
+startFormCommand :: ApiCall QFnName (FormId, ProcessInfo ())
+startFormCommand = ApiCall "StartFormCommand"
+
+formInfoCommand :: ApiCall FormId (MTypeRepresentation, ProcessInfo (), QFnName)
+formInfoCommand = ApiCall "FormInfoCommand"
+
 -- | The 'Text' in the output is a function or type name
-listCommand :: ApiCall (Maybe EntityType, Bool) [(Qualified Text, TypeSignature)]
-listCommand = ApiCall "ListCommand"
+listAllCommand :: ApiCall Bool (QMap FnName MethodInfo, QMap TyName TypeSignature)
+listAllCommand = ApiCall "ListCommand"
+
+listFnCommand :: ApiCall (Bool, Maybe MethodType) (QMap FnName MethodInfo)
+listFnCommand = ApiCall "ListFnCommand"
+
+listTypesCommand :: ApiCall Bool (QMap TyName TypeSignature)
+listTypesCommand = ApiCall "ListTypesCommand"
 
 listScheduledCommand :: ApiCall () [(ProcessInfo (), [ScheduledTime])]
 listScheduledCommand = ApiCall "ListScheduledCommand"
 
-listModulesCommand :: ApiCall Bool [ModuleName]
+listModulesCommand :: ApiCall Bool [ModuleRef]
 listModulesCommand = ApiCall "ListModulesCommand"
 
-deleteModuleCommand :: ApiCall ModuleName ()
+deleteModuleCommand :: ApiCall ModuleRef ()
 deleteModuleCommand = ApiCall "DeleteModuleCommand"
 
 listProcessesCommand :: ApiCall () [ProcessInfo ()]
@@ -313,16 +345,17 @@ listStoppedCommand = ApiCall "ListStoppedCommand"
 gcCommand :: ApiCall () [UUID]
 gcCommand = ApiCall "GarbageCollectCommand"
 
-buildCommand :: ApiCall (BuildTarball, DropBadModules) ModuleName
+buildCommand :: ApiCall BuildTarball ModuleRef
 buildCommand = ApiCall "BuildCommand"
 
-buildFrontendCommand :: ApiCall (ContainerData, DropBadModules) ModuleName
+buildFrontendCommand :: ApiCall ContainerData ModuleRef
 buildFrontendCommand = ApiCall "BuildFrontendCommand"
 
 testCommand :: ApiCall (QFnName, HttpPath) (ProcessInfo ())
 testCommand = ApiCall "TestCommand"
 
 $(makeLenses ''ServerInfo)
+$(makeLenses ''ForFrontend)
 $(makeLenses ''ProcessInfo)
 $(makeLenses ''BookendTime)
 $(makeLenses ''StartTime)
@@ -345,7 +378,9 @@ allApiCalls =
   , 'deleteModuleCommand
   , 'gcCommand
   , 'infoCommand
-  , 'listCommand
+  , 'frontendInfoCommand
+  , 'listAllCommand
+  , 'listTypesCommand
   , 'listModulesCommand
   , 'listProcessesCommand
   , 'listStoppedCommand

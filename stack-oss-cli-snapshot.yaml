@@ -1,0 +1,37 @@
+flags: {}
+compiler: ghc-8.0.2
+resolver: lts-8.11
+name: stack-oss-cli-snapshot
+
+packages:
+- git: https://github.com/feuerbach/monad-classes.git
+  commit: fb93f7ed0b25a7ac1abfe34c73cac87ae9c772d1
+- git: https://github.com/nstack/d-bus.git
+  commit: e8875d3e4a2f1ce1ef63e22f769ae53af394b575
+- git: https://github.com/feuerbach/smallcheck.git
+  commit: 9d1c08b0f441fcc2b0e38ed8392d52120869eeda
+- git: https://github.com/feuerbach/unification-fd.git
+  commit: e84ba37142462c0ddb377ea7fc5d73accaa6d053
+# for dfsForestFrom and transpose
+- git: https://github.com/feuerbach/alga.git
+  commit: a0f57523fbd64b954307e86cb911800903cf0124
+- git: https://github.com/nstack/streaming-binary.git
+  commit: f46687285bdfa7916fc2ed2b295cceecd9bafdfa
+- aeson-1.1.1.0
+- category-printf-0.1.1.0
+- derive-2.6.1
+- logging-effect-1.1.2
+- megaparsec-6.2.0
+- mustache-2.1.2
+- tree-view-0.5
+- th-reify-many-0.1.7
+# Workaround for Windows builds: https://github.com/haskell-foundation/foundation/issues/238
+- foundation-0.0.7
+# Dependency of the new megaparsec, not in stackage yet
+- parser-combinators-0.1.0
+- yaml-combinators-1.1
+# needed for yaml-combinators
+- generics-sop-0.3.1.0
+- QuickCheck-2.10.1
+- these-0.7.4
+

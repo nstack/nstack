@@ -1,5 +1,5 @@
 name: nstack
-version: 0.0.9
+version: 0.0.10.1
 cabal-version: >=1.22
 build-type: Simple
 license: BSD3
@@ -23,10 +23,12 @@ library
           NStack.Comms.TypeRepresentation
           NStack.Comms.Types
           NStack.UUIDOrphans
+          NStack.Module.Name
           NStack.Module.Parser
           NStack.Module.QMap
           NStack.Module.Types
           NStack.Module.Types.Aeson
+          NStack.Module.Version
           NStack.Registry.Routes
           NStack.Registry.Types
           NStack.SafeCopyOrphans
@@ -79,6 +81,7 @@ library
         parsec,
         process,
         psqueues,
+        random,
         regex-applicative,
         safecopy,
         scientific,

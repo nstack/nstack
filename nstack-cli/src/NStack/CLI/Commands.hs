@@ -40,7 +40,6 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Data.Yaml as Y
-import Data.Coerce (coerce)
 import qualified Filesystem.Path.CurrentOS as FP -- system-filepath
 import Network.HTTP.Client hiding (responseStatus, Proxy)
 import Network.HTTP.Client.TLS (mkManagerSettings)
@@ -59,8 +58,11 @@ import NStack.CLI.Auth (allowSelfSigned)
 import NStack.CLI.Types
 import NStack.CLI.Templates (createFromTemplate)
 import NStack.Comms.Types
-import NStack.Module.Types
+import NStack.Module.Name (ModuleName, ModuleRef, ModuleURI(..), showShortModuleUri)
 import NStack.Module.Parser (parseModuleName)
+import NStack.Module.QMap (QMap(..))
+import NStack.Module.Types
+import NStack.Module.Version (ExactRelease(..), SemVer(..))
 import qualified NStack.Utils.Archive as Archive
 import NStack.Module.ConfigFile (configFile, workflowFile, ConfigStack(..), mkStackParent)
 import NStack.Prelude.Applicative ((<&>))
@@ -84,16 +86,18 @@ data Command
   | ConnectCommand ProcessId
   | ServerLogsCommand
   | InfoCommand Bool
-  | ListCommand (Maybe EntityType) Bool
+  | ListFnCommand MethodType Bool
+  | ListTypesCommand Bool
+  | ListAllCommand Bool
   | ListModulesCommand Bool
-  | DeleteModuleCommand ModuleName
+  | DeleteModuleCommand ModuleRef
   | ListProcessesCommand
   | ListStoppedCommand (Maybe StoppedFrom) (Maybe StoppedAmount)
   | GarbageCollectCommand
-  | BuildCommand DropBadModules
+  | BuildCommand
   | RegisterCommand UserName Email ServerAddr
   | SendCommand Path Snippet
-  | TestCommand ModuleName FnName Snippet
+  | TestCommand ModuleRef FnName Snippet
   | LoginCommand HostName Int UserId SecretKey
   | ListScheduled
 
@@ -110,8 +114,9 @@ instance M.ToMustache TemplateOut where
 snapshot :: (FedoraVersion, FedoraSnapshot)
 snapshot = (25, 0)
 
+-- The default api version for a language on `nstack init`
 langStacks :: Language -> APIVersion
-langStacks _ = 1
+langStacks _ = 2
 
 initCommand :: CCmdEff m => InitStack -> GitRepo -> m ()
 initCommand initStack (GitRepo wantGitRepo) = do
@@ -161,7 +166,7 @@ runTemplates curDir modName stackOrParent = do
 -- HACK - to remove once we have username on CLI / remove modulename parsing
 -- Currently used to display the ModuleName on the CLI without the default `nstack` author
 localModName :: ModuleName -> Text
-localModName = last . T.splitOn "nstack/" . T.pack . showShortModuleName
+localModName = last . T.splitOn "nstack/" . T.pack . showShortModuleUri
 
 
 -- | init the module using Git
@@ -173,29 +178,30 @@ initGitRepo = liftIO $ do
   -- Sh.run "git" ["branch", "nstack"]
 
 -- | Returns the artefacts needed to build a module
+-- | TODO: Needs to be updated to take the language from the nstack.yaml to determine the required files
 buildArtefacts
   :: CCmdEff m
   => FilePath -- ^ directory
   -> [FilePath] -- ^ globs from the files section of nstack.yaml
   -> m ByteString
 buildArtefacts dir globs = do
-  let std_files = [configFile, workflowFile, "setup.py", "service.py", "requirements.txt"]
+  let std_files = [configFile, workflowFile, "setup.py", "service.py", "requirements.txt", "service.r"]
   liftIO $ Archive.expandCheckPack dir std_files globs
 
 printInfo :: ServerInfo -> Text
 printInfo (ServerInfo ps stopped meths ms) = prettyT' $
       block "Running processes:" (map M.ppr ps) </>
       block "Stopped processes:" (map M.ppr stopped) </>
-      block "Available functions:" (prettyPrintMethods $ coerce . Map.toList . fmap typeSignature $ meths) </>
+      block "Available functions:" (prettyPrintMethods $ fmap typeSignature meths) </>
       M.text "Container modules:" </> showModules ms
         where
 
           typeSignature (MethodInfo t _) = t
 
-          showModules :: Map.Map ModuleName ModuleInfo -> M.Doc
+          showModules :: Map.Map ModuleRef ModuleInfo -> M.Doc
           showModules = M.stack . fmap M.text . renderTree . mkTree . Map.toList
 
-          renderTree :: Forest (ModuleName, ModuleInfo) -> [String]
+          renderTree :: Forest (ModuleRef, ModuleInfo) -> [String]
           renderTree = fmap (showTree . fmap renderMod)
             where
               renderMod (modName, ModuleInfo{..}) = unpack . prettyT 120 $
@@ -203,21 +209,20 @@ printInfo (ServerInfo ps stopped meths ms) = prettyT' $
                                                           if _miIsFramework then "Framework" else "User Code",
                                                           M.ppr _miImage])
 
-          mkTree :: [(ModuleName, ModuleInfo)] -> Forest (ModuleName, ModuleInfo)
+          mkTree :: [(ModuleRef, ModuleInfo)] -> Forest (ModuleRef, ModuleInfo)
           mkTree mods = unfoldForest f baseMods
             where baseMods = filter (isNothing . _miParent . snd) mods
                   f mod'@(modName, _) = (mod', filter ((== Just modName) . _miParent . snd) mods)
 
-printMethods :: [(Qualified Text, TypeSignature)] -> Text
+printMethods :: M.Pretty a => QMap a TypeSignature -> Text
 printMethods = prettyT' . M.stack . prettyPrintMethods
 
-prettyPrintMethods :: [(Qualified Text, TypeSignature)] -> [M.Doc]
-prettyPrintMethods =  moduleMethodBlocks . fmap (fmap printMethod) . fmap Map.toList . nest
+prettyPrintMethods :: M.Pretty a => QMap a TypeSignature -> [M.Doc]
+prettyPrintMethods =  moduleMethodBlocks . methodDocs
   where printMethod (uri, (TypeSignature ts)) = M.ppr uri <> " : " <> M.ppr ts
         printMethod (uri, TypeDefinition td) = "type " <> M.ppr uri <> " = " <> M.ppr td
+        methodDocs (QMap inner) = fmap (Map.foldMapWithKey (\k a -> [curry printMethod k a])) inner
         moduleMethodBlocks = fmap (uncurry (block . unpack . pprT)) . Map.toList
-        nest = foldr (\((Qualified c d), a) m -> Map.unionWith (<>) m (newMap c d a)) Map.empty
-        newMap c d a = Map.singleton c (Map.singleton d a)
 
 printProcesses :: forall a. ProcPrintable a => [ProcessInfo a] -> Text
 printProcesses = \case
@@ -260,8 +265,11 @@ showStartMessage (ProcessInfo (ProcessId pId) _ _ _) = "Successfully started as 
 showStopMessage :: (ProcessInfo a) -> Text
 showStopMessage (ProcessInfo (ProcessId pId) _ _ _) = "Successfully stopped process " <> pId
 
-showModuleBuild :: ModuleName -> Text
-showModuleBuild mName = "Module " <> pprT mName <> " built successfully. Use `nstack list functions` to see all available functions."
+showModuleBuild :: ModuleRef -> Text
+showModuleBuild mName = "Module " <> T.pack (showShortModuleUri mName) <> " built successfully" <> maybeFullSnap <>  ". Use `nstack list functions` to see all available functions."
+  where maybeFullSnap = case release (version mName) of
+                          (Snap _) -> " (as " <> pprT mName  <> ")"
+                          _        -> ""
 
 loginSettings :: HostName -> Int -> UserId -> SecretKey -> CCmd ()
 loginSettings hostname port username pw = do modifySettings $ \s -> s & serverConn ?~ (ServerDetails (Just hostname)

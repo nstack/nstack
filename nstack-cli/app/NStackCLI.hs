@@ -44,7 +44,8 @@ import NStack.Comms.Types
 import NStack.Comms.ApiHashValue (apiHashValue)
 import NStack.Module.ConfigFile (ConfigFile(..), configFile, getConfigFile,
   workflowFile, projectFile, getProjectFile, _projectModules)
-import NStack.Module.Types (ModuleName, FnName, Qualified(..))
+import NStack.Module.Name (ModuleName)
+import NStack.Module.Types (FnName, Qualified(..))
 import NStack.Prelude.Text (pprT, prettyLinesOr, joinLines, showT)
 import NStack.Prelude.FilePath (fromFP)
 import NStack.Settings
@@ -88,6 +89,8 @@ formatNotebook module_name fn_name = DSLSource $
   "import " <> pprT module_name <> " as M" <> "\n" <>
   "M." <> pprT fn_name
 
+typeSignature :: MethodInfo -> TypeSignature
+typeSignature (MethodInfo ts _) = ts
 
 run :: Command -> CCmd ()
 run (InitCommand initStack gitRepo) = CLI.initCommand initStack gitRepo
@@ -103,7 +106,9 @@ run (StopCommand pId)                = callServer stopCommand pId CLI.showStopMe
 run (LogsCommand pId)                = callServer logsCommand pId catLogs
 run ServerLogsCommand                = callServer serverLogsCommand () catLogs
 run (InfoCommand fAll)               = callServer infoCommand fAll CLI.printInfo
-run (ListCommand mType fAll)         = callServer listCommand (mType, fAll) CLI.printMethods
+run (ListAllCommand fAll)            = callServer listAllCommand fAll (uncurry (<>) . bimap (CLI.printMethods . fmap typeSignature) CLI.printMethods)
+run (ListFnCommand mType fAll)       = callServer listFnCommand (fAll, Just mType) (CLI.printMethods . fmap typeSignature)
+run (ListTypesCommand fAll)          = callServer listTypesCommand fAll CLI.printMethods
 run (ListModulesCommand fAll)        = callServer listModulesCommand fAll (`prettyLinesOr` "No registered images")
 run (DeleteModuleCommand m)          = callServer deleteModuleCommand m (const $ "Module deleted: " <> pprT m)
 run ListProcessesCommand             = callServer listProcessesCommand () CLI.printProcesses
@@ -111,7 +116,7 @@ run (ListStoppedCommand mStart mEnd) = callServer listStoppedCommand (mStart, mE
 run GarbageCollectCommand            = callServer gcCommand () (`prettyLinesOr` "Nothing removed")
 run ListScheduled                    = callServer listScheduledCommand () CLI.printScheduledProcesses
 run (ConnectCommand pId)             = connectStdInOut pId
-run (BuildCommand dropBadModules) =
+run (BuildCommand) =
   ifM (R.testfile projectFile) projectBuild
     (ifM (R.testfile configFile ||^ R.testfile workflowFile) workflowModule
       (throwError (unpack $ R.format ("A valid nstack build file ("%R.fp%", "%R.fp%", "%R.fp%") was not found") projectFile configFile workflowFile)))
@@ -121,10 +126,10 @@ run (BuildCommand dropBadModules) =
       modules <- _projectModules <$> getProjectFile
       forM_ modules $ \modPath -> do
         liftInput . HL.outputStrLn . unpack $ R.format ("Building " % R.fp) modPath
-        buildDirectory dropBadModules modPath
+        buildDirectory modPath
     workflowModule = do
       liftInput . HL.outputStrLn $ "Building an NStack module. Please wait. This may take some time."
-      buildDirectory dropBadModules "."
+      buildDirectory "."
 run (LoginCommand a b c d)    = CLI.loginSettings a b c d
 run (RegisterCommand userName email mServer) = CLI.registerCommand userName email mServer
 run (SendCommand path' snippet) = CLI.sendCommand path' snippet
@@ -149,8 +154,8 @@ randomPath = ("/" <>) . UUID.toText <$> randomIO
 
 -- | Build an nstack module (not a project) that resides in the given
 -- directory
-buildDirectory :: DropBadModules -> R.FilePath -> CCmd ()
-buildDirectory dropBadModules dir = do
+buildDirectory :: R.FilePath -> CCmd ()
+buildDirectory dir = do
   globs <- ifM (R.testfile (dir R.</> configFile))
     (do
       config <- liftIO $ getConfigFile dir
@@ -159,7 +164,7 @@ buildDirectory dropBadModules dir = do
     (return [])
 
   package <- CLI.buildArtefacts (fromFP dir) globs
-  callServer buildCommand (BuildTarball $ toStrict package, dropBadModules) showModuleBuild
+  callServer buildCommand (BuildTarball $ toStrict package) showModuleBuild
 
 -- | Run a command on the user client
 runClient :: Transport -> CCmd () -> IO ()

@@ -14,10 +14,12 @@ data TypeRepresentation
   | BoolType
   | JsonType
   | ByteArrayType
-  | VoidType 
+  | VoidType
   | MapType (Map.Map T.Text TypeRepresentation)
   | TupleType [TypeRepresentation]
   | ListType TypeRepresentation
+  | VectType Integer TypeRepresentation
+  | MatrixType Integer Integer TypeRepresentation
   | OptionalType TypeRepresentation
   | SumType (Map.Map T.Text TypeRepresentation)
   deriving (Show, Eq, Generic)

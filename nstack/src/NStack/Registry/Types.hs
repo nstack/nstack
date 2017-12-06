@@ -36,14 +36,13 @@ data DockerImageManifestV2_2 = DockerImageManifestV2_2 {
     imMediaType :: Text, -- must be application/vnd.docker.distribution.manifest.v2+json
     imConfig :: Descriptor, -- references a DockerImageConfigV1
     imLayers :: [Descriptor]
-    } deriving (Generic, Show);
+} deriving (Generic, Show);
 
 instance FromJSON DockerImageManifestV2_2 where
     parseJSON = fromDropPrefix 2
 
 instance ToJSON DockerImageManifestV2_2 where
     toJSON = toDropPrefix 2
-
 
 dockerImageManifestV2_2MediaType :: M.MediaType
 dockerImageManifestV2_2MediaType = "application" M.// "vnd.docker.distribution.manifest.v2+json"
@@ -59,7 +58,8 @@ instance FromJSON a => MimeUnrender DockerImageManifestV2_2 a where
 instance ToJSON a => MimeRender DockerImageManifestV2_2 a where
     mimeRender _ = encode
 
--- |Descriptor; no official Docker schema, just the OCI one
+-- |Descriptor is a reference to another entity (like an image manifest or layer)
+-- No official Docker schema, just the OCI one
 -- application/vnd.oci.descriptor.v1+json
 -- https://github.com/opencontainers/image-spec/blob/master/descriptor.md
 data Descriptor = Descriptor {
@@ -67,8 +67,8 @@ data Descriptor = Descriptor {
     dSize :: Integer, -- REQUIRED
     dDigest :: Text, -- REQUIRED
     dUrls :: Maybe [Text],  -- optional
-    dPlatform :: Maybe Platform -- optional, ONLY when mediaType == application/vnd.docker.distribution.manifest.v2+json
---  dAnnotations :: Maybe [(Text, Text)]   -- optional, OCI extension
+    dPlatform :: Maybe Platform, -- optional, ONLY when mediaType == application/vnd.docker.distribution.manifest.v2+json
+    dAnnotations :: Maybe [(Text, Text)]   -- optional, OCI extension
 } deriving (Generic, Show);
 
 instance FromJSON Descriptor where
@@ -88,7 +88,7 @@ data Platform = Platform {
 
 instance FromJSON Platform where
     parseJSON = genericParseJSON opts . jsonLower where
-        opts = defaultOptions { 
+        opts = defaultOptions {
             -- os.version and os.features
             fieldLabelModifier = map (C.toLower . (\c -> if c=='_' then '.' else c)) . drop 1}
 
@@ -99,8 +99,8 @@ instance ToJSON Platform where
             fieldLabelModifier = map (C.toLower . (\c -> if c=='_' then '.' else c)) . drop 1}
 
 -- |Container config JSON
--- application/vnd.docker.container.image.v1+json 
--- 
+-- application/vnd.docker.container.image.v1+json
+--
 -- In principle this is documented here:
 -- https://github.com/moby/moby/blob/master/image/spec/v1.md#docker-image-specification-v100
 -- but this is *incomplete*! (e.g. https://github.com/opencontainers/image-spec/pull/371)
@@ -154,20 +154,23 @@ data DockerImageConfigV1 = DockerImageConfigV1 {
 --     "created": "2017-08-23T22:31:12.496245278Z",
 --     "docker_version": "17.03.2-ce",
 --     "history": [
---       < see HistoryEntry below > 
+--       < see HistoryEntry below >
 --     ],
 --     "os": "linux",
---     "rootfs": < see RootFSEntry below > 
+--     "rootfs": < see RootFSEntry below >
 --   }
+
+-- |OCI Image Configuration
+-- application/vnd.oci.image.config.v1+json
 
 instance FromJSON DockerImageConfigV1 where
     parseJSON = fromDropPrefix 2
 
 instance ToJSON DockerImageConfigV1 where
-    toJSON = toDropPrefix 2 
+    toJSON = toDropPrefix 2
 
 instance Accept DockerImageConfigV1 where
-    contentType _ = 
+    contentType _ =
         "application" M.// "vnd.docker.container.image.v1+json"
 
 instance FromJSON a => MimeUnrender DockerImageConfigV1 a where
@@ -212,11 +215,12 @@ instance FromJSON HistoryEntry where
 instance ToJSON HistoryEntry where
     toJSON = toDropPrefix 1
 
+-- |Execution parameters and configuration
 -- As above with the enclosing DockerImageConfig, this is not well documented.
 -- In practise the best reference we have is probably the Docker code:
 -- https://github.com/moby/moby/blob/b248de7e332b6e67b08a8981f68060e6ae629ccf/api/types/container/config.go#L30
 -- but this is a superset of what's used in practise.
--- 
+--
 -- Similar implementation of the related OCI type:
 -- https://github.com/opencontainers/image-spec/blob/97ae57f204b5956aa313d453ead9094ff9056b32/specs-go/v1/config.go#L23
 --
@@ -263,7 +267,7 @@ instance ToJSON DockerExecutionConfig
 instance FromJSON DockerExecutionConfig
 
 -- |Manifest list, aka "fat manifest", pointing to one or more manifests
--- application/vnd.docker.distribution.manifest.list.v2+json 
+-- application/vnd.docker.distribution.manifest.list.v2+json
 -- https://docs.docker.com/registry/spec/manifest-v2-2/#manifest-list
 --
 -- TODO(jonboulle): implement.
@@ -276,8 +280,42 @@ instance FromJSON DockerExecutionConfig
 --    manifests :: [Descriptor]
 --}
 
+-- |Marker file for an OCI Image Layout
+-- application/vnd.oci.layout.header.v1+json: OCI Layout
+-- https://github.com/opencontainers/image-spec/blob/master/image-layout.md#oci-layout-file
+--
+-- This is a file that must exist at the path `oci-layout` within an OCI Image Layout
+-- It may include additional fields
+--
+data OCIImageLayoutHeader = OCIImageLayoutHeader {
+    imageLayoutVersion :: String -- REQUIRED
+} deriving (Generic, Show);
+
+instance ToJSON OCIImageLayoutHeader
+
+instance FromJSON OCIImageLayoutHeader
+
+-- | Image Index
+-- Entrypoint for references and descriptors within an OCI Image Layout
+-- application/vnd.oci.image.index.v1+json: Image Index
+--
+-- This must exist in the file `index.json` in the root of an OCI Image Layout
+--
+data OCIImageIndex = OCIImageIndex {
+-- TODO(jonboulle): finish me
+}
+
+-- | OCI Image Manifest
+-- application/vnd.oci.image.manifest.v1+json: Image manifest
+
 -- Should be unnecessary to implement:
+--
 -- application/vnd.docker.image.rootfs.diff.tar.gzip: "Layer", as a gzipped tar
 -- application/vnd.docker.image.rootfs.foreign.diff.tar.gzip: "Layer", as a gzipped tar that should never be pushed
 -- application/vnd.docker.distribution.manifest.v1+json: schema1 (old manifest format)
 -- application/vnd.docker.plugin.v1+json: Plugin config JSON
+--
+-- application/vnd.oci.image.layer.v1.tar+gzip: identical to application/vnd.docker.image.rootfs.diff.tar.gzip
+-- application/vnd.oci.image.layer.v1.tar: uncompressed variant
+-- application/vnd.oci.image.layer.nondistributable.v1.tar+gzip: layer that should not be uploaded
+-- application/vnd.oci.image.layer.nondistributable.v1.tar: uncompressed variant

@@ -14,7 +14,8 @@ import Data.String (IsString)
 import Turtle ((</>))
 import qualified Turtle as R
 
-import NStack.Module.Types (APIVersion, ModuleName(..), Language(..), FedoraVersion, FedoraSnapshot)
+import NStack.Module.Name (ModuleName)
+import NStack.Module.Types (APIVersion, Language(..), FedoraVersion, FedoraSnapshot)
 import NStack.Module.Parser (parseModuleName, pLanguage, inlineParser)
 import NStack.Prelude.FilePath (fromFP, toFP)
 import NStack.Prelude.Exception (throwPermanentError)

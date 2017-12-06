@@ -6,10 +6,12 @@ import Data.Aeson
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Monoid ((<>))
+import Data.Serialize (Serialize)
 
 import GHC.Generics (Generic)
 
-import NStack.Module.Types (Qualified(..), ModuleName(..))
+import NStack.Module.Name (ModuleRef)
+import NStack.Module.Types (Qualified(..))
 import NStack.Module.Types.Aeson ()
 
 {-
@@ -18,8 +20,10 @@ import NStack.Module.Types.Aeson ()
 -}
 
 newtype QMap k v = QMap {
-  inner :: Map ModuleName (Map k v)
-} deriving (Show, Functor, Generic, ToJSON, FromJSON)
+  inner :: Map ModuleRef (Map k v)
+} deriving (Show, Functor, Generic, ToJSON, FromJSON, Eq, Ord)
+
+instance (Serialize k, Serialize v, Ord k) => Serialize (QMap k v)
 
 -- QMap monoid is left-biased like Map
 -- This could probably be more performant if we took into account
@@ -40,7 +44,7 @@ insert (Qualified mod' k) v (QMap inner) = QMap $ Map.insertWith f mod' (Map.sin
   where f new old = new <> old
 
 -- Overrides previous members
-overrideModule :: Ord k => ModuleName -> Map k v -> QMap k v -> QMap k v
+overrideModule :: Ord k => ModuleRef -> Map k v -> QMap k v -> QMap k v
 overrideModule mod' members (QMap inner) = QMap $ Map.insert mod' members inner
 
 flatten :: Ord k => QMap k v -> Map (Qualified k) v

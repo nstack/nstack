@@ -6,8 +6,9 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 import NStack.Auth
+import NStack.Module.Name (ModuleURI(..), NSUri(..))
+import NStack.Module.Version (SemVer(..), FuzzyRelease(..))
 import NStack.Module.Parser
-import NStack.Module.Types
 
 {-
    Module Names take the form:
@@ -57,10 +58,10 @@ moduleNameTests = testGroup "ModuleName Tests" [
 
 (~>) :: Text -> (Text, Text, Text, (Integer, Integer, Integer)) -> IO ()
 (~>) src (reg, author, name, (maj, mnr, pat)) = either assertFailure (assertEqual "Should be equal" expected) $ parseModuleName src
-  where expected = (ModuleName (uri reg)
-                               (UserName author)
-                               (uri name)
-                               (Version maj mnr pat Release))
+  where expected = (ModuleURI (uri reg)
+                              (UserName author)
+                              (uri name)
+                              (SemVer maj mnr pat FRelease))
 
 (~/>) :: Text -> Fail -> IO ()
 (~/>) src _ = either (const $ assertBool "Did not fail" True) (const $ assertFailure "Should fail") $ parseModuleName src

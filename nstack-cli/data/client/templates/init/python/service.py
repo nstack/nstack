@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-{{ name }} Service
+{{ name }} Module
 """
 import nstack
 
-class Service(nstack.BaseService):
+class Module(nstack.Module):
     def numChars(self, x):
         return len(x)
 

@@ -5,6 +5,7 @@ module NStack.Prelude.Monad (
 , maybeToExcept
 , maybeToRight
 , orError
+, orElse
 , orException
 , try'
 , (>>->)
@@ -27,6 +28,9 @@ maybeToExcept l = maybe (throwError l) return
 maybeToRight :: a -> Maybe b -> Either a b
 maybeToRight l a = case a of Nothing -> Left l
                              Just x -> Right x
+
+orElse :: Maybe a -> a -> a
+orElse ma default' = maybe default' id ma
 
 -- | synonym of maybeToExcept that reads better when infix
 orError :: MonadError e m => Maybe a -> e -> m a

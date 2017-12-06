@@ -12,8 +12,9 @@ import Text.Megaparsec (try)    -- from: megaparsec
 import NStack.Auth (hexUserId, textSecretKey, UserName(..), validEmail)
 import NStack.CLI.Commands (Command(..), InitStack(..))
 import NStack.Comms.Types
-import NStack.Module.Parser (pLanguage, inlineParser, parseModuleName)
-import NStack.Module.Types (DebugOpt(..), BaseImage(..), ModuleName(..), FnName(..))
+import NStack.Module.Parser (pLanguage, inlineParser, parseModuleName, parseModuleRef)
+import NStack.Module.Name (ModuleName, ModuleRef)
+import NStack.Module.Types (DebugOpt(..), BaseImage(..), FnName(..))
 import NStack.Prelude.Monad (maybeToRight)
 
 
@@ -23,6 +24,12 @@ pModuleName = argument pModuleName' (metavar "module" <> help "Module name")
   where
     pModuleName' :: ReadM ModuleName
     pModuleName' = eitherReader (runExcept . parseModuleName . pack)
+
+pModuleRef :: Parser ModuleRef
+pModuleRef = argument pModuleRef' (metavar "module" <> help "Module reference")
+  where
+    pModuleRef' :: ReadM ModuleRef
+    pModuleRef' = eitherReader (runExcept . parseModuleRef . pack)
 
 pFnName :: Parser FnName
 pFnName = (FnName . pack) <$> strArgument (metavar "function_name" <> help "Function name")
@@ -107,7 +114,7 @@ sendOpts = SendCommand <$> argument str (metavar "path" <> help "Path the source
                        <*> argument str (metavar "event" <> help "JSON Snippet to send as an event")
 
 testOpts :: Parser Command
-testOpts = TestCommand <$> pModuleName
+testOpts = TestCommand <$> pModuleRef
                        <*> pFnName
                        <*> argument str (metavar "event" <> help "JSON Snippet to send as an event")
 
@@ -115,12 +122,12 @@ testOpts = TestCommand <$> pModuleName
 listOpts :: Parser Command
 listOpts = hsubparser
   (  command "modules"   (info (pure ListModulesCommand) (progDesc "List all available modules"))
-  <> command "all"       (info (pure $ ListCommand Nothing) (progDesc "List all functions and types"))
-  <> command "sinks"     (info (pure $ ListCommand $ Just SinkType) (progDesc "List only sinks"))
-  <> command "sources"   (info (pure $ ListCommand $ Just SourceType) (progDesc "List only sources"))
-  <> command "functions" (info (pure $ ListCommand $ Just MethodType) (progDesc "List only unconnected functions"))
-  <> command "workflows" (info (pure $ ListCommand $ Just WorkflowType) (progDesc "List only fully-connected workflows"))
-  <> command "types" (info (pure $ ListCommand $ Just TypeType) (progDesc "List only types"))
+  <> command "all"       (info (pure ListAllCommand) (progDesc "List all functions and types"))
+  <> command "sinks"     (info (pure $ ListFnCommand SinkType) (progDesc "List only sinks"))
+  <> command "sources"   (info (pure $ ListFnCommand SourceType) (progDesc "List only sources"))
+  <> command "functions" (info (pure $ ListFnCommand MethodType) (progDesc "List only unconnected functions"))
+  <> command "workflows" (info (pure $ ListFnCommand WorkflowType) (progDesc "List only fully-connected workflows"))
+  <> command "types"     (info (pure ListTypesCommand) (progDesc "List only types"))
   ) <*> allSwitch
 
 loginOpts :: Parser Command
@@ -131,19 +138,14 @@ loginOpts = LoginCommand <$> argument (fromString <$> str) (metavar "SERVER_HOST
             where userId    = maybeReader $ (^? hexUserId) . fromString
                   secretKey = maybeReader $ (^? textSecretKey) . fromString
 
-buildOpts :: Parser Command
-buildOpts = BuildCommand
-  <$> flag FailBadModules DropBadModules
-        (long "force" <> short 'f' <> help "drop downstream modules that are broken by the new version of this module")
-
 -- | Parser for all subcommand options
 cmds :: Parser Command
 cmds =  hsubparser ( command "info" (info (InfoCommand <$> allSwitch) (progDesc "Show the server status"))
                 <>  command "init" (info initOpts (progDesc "Initialise a new module/workflow"))
                 <>  command "list" (info (helper <*> listOpts) (progDesc "List registered modules or functions"))
                 <>  command "list-scheduled" (info (pure ListScheduled) (progDesc "List scheduled processes"))
-                <>  command "build" (info buildOpts (progDesc "Build module"))
-                <>  command "delete" (info (DeleteModuleCommand <$> pModuleName) (progDesc "Delete a module"))
+                <>  command "build" (info (pure BuildCommand) (progDesc "Build module"))
+                <>  command "delete" (info (DeleteModuleCommand <$> pModuleRef) (progDesc "Delete a module"))
                 <>  command "start" (info startOpts (progDesc "Start a workflow"))
                 <>  command "notebook" (info notebookOpts (progDesc "Enter some DSL interactively"))
                 <>  command "stop" (info stopOpts (progDesc "Stop a process"))

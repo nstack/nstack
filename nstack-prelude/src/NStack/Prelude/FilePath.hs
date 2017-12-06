@@ -1,6 +1,7 @@
 module NStack.Prelude.FilePath (
+(</>)
   -- * File path conversions
-  toFP
+, toFP
 , fromFP
 , formatFP
 , fpToText
@@ -11,7 +12,7 @@ import Control.Monad.Except (MonadError)
 import Data.Bifunctor (first)
 import Data.Text (Text, unpack)
 import qualified Filesystem.Path.CurrentOS as FP
-import Turtle (format, fp)
+import Turtle (format, fp, (</>))
 
 import NStack.Prelude.Monad (eitherToExcept)
 
